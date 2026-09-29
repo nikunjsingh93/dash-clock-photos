@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10171b">
+  <title>Dash Clock Photos</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="login" class="login-screen" hidden>
+    <div class="login-art" aria-hidden="true"><div class="mini-time">10:00 <span>☀ 76°</span></div></div>
+    <section class="login-card">
+      <div class="brand-mark">◷</div>
+      <p class="eyebrow">YOUR OWN AMBIENT DISPLAY</p>
+      <h1>Make room for<br><em>the moment.</em></h1>
+      <p class="intro">Your favorite photos, the time, and the weather. All from your own server.</p>
+      <form id="login-form">
+        <label>Username<input name="username" autocomplete="username" required autofocus></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Enter your display <span aria-hidden="true">→</span></button>
+        <p id="login-error" class="form-error" role="alert"></p>
+      </form>
+      <p class="login-foot">A private window into your photo library.</p>
+    </section>
+  </main>
+
+  <main id="display" class="display" hidden>
+    <div class="ambient-scene" aria-hidden="true"><div class="stars"></div><div class="horizon"></div></div>
+    <img id="photo-a" class="photo active" alt="">
+    <img id="photo-b" class="photo" alt="">
+    <div class="shade"></div>
+    <header class="display-header">
+      <div class="display-brand"><span class="brand-symbol">◷</span><span>DASH CLOCK <strong>PHOTOS</strong></span></div>
+      <div class="header-actions">
+        <span id="photo-count" class="photo-count"></span>
+        <button id="fullscreen" class="icon-button" title="Full screen" aria-label="Full screen">⛶</button>
+        <button id="settings-open" class="icon-button" title="Settings" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+    <div id="empty" class="empty-state" hidden>
+      <span class="empty-icon">✧</span>
+      <h2>Your moments belong here.</h2>
+      <p>Put photos in your account folder on the server, then refresh the library.</p>
+      <code id="folder-hint"></code>
+      <button id="empty-refresh" class="outline-button">Refresh photos</button>
+    </div>
+    <div class="display-bottom">
+      <div class="clock-wrap">
+        <div class="clock-line"><time id="clock">10:00</time><span id="ampm" class="ampm"></span><span class="clock-divider"></span><span id="temp" class="temp">Weather off</span></div>
+        <div class="date-line"><span id="date"></span><span class="date-dot">·</span><span id="weather-description">Set your location in settings</span></div>
+      </div>
+      <nav class="playback" aria-label="Slideshow controls">
+        <button id="previous" aria-label="Previous photo" title="Previous photo">‹</button>
+        <button id="play-pause" aria-label="Pause slideshow" title="Pause slideshow">Ⅱ</button>
+        <button id="next" aria-label="Next photo" title="Next photo">›</button>
+      </nav>
+    </div>
+  </main>
+
+  <div id="panel-backdrop" class="panel-backdrop" hidden></div>
+  <aside id="panel" class="panel" aria-label="Display settings" aria-hidden="true">
+    <header class="panel-header"><div><p class="eyebrow">PERSONALIZE YOUR SPACE</p><h2>Display settings</h2></div><button id="settings-close" class="close-button" aria-label="Close settings">×</button></header>
+    <div class="panel-scroll">
+      <section class="setting-section"><div class="section-title"><h3>Photo library</h3><button id="refresh" class="text-button">Refresh</button></div><p id="library-info" class="muted"></p><p class="hint">Photos are read directly from your server’s mounted HDD. JPG, PNG, WebP, AVIF, and GIF are supported.</p></section>
+      <section class="setting-section"><h3>Slideshow</h3><label class="setting-row">Change photo every<select id="interval"><option value="10">10 seconds</option><option value="20">20 seconds</option><option value="30" selected>30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option></select></label><label class="setting-row">Photo order<select id="order"><option value="shuffle">Shuffle</option><option value="newest">Newest first</option></select></label><label class="setting-row">Clock style<select id="clock-format"><option value="12">12 hour</option><option value="24">24 hour</option></select></label></section>
+      <section class="setting-section"><h3>Weather & time zone</h3><p id="current-location" class="muted">No location set</p><form id="location-form" class="inline-form"><input id="location-query" placeholder="Search city or postal code" aria-label="City or postal code" required><button type="submit">Search</button></form><div id="location-results" class="location-results"></div><label class="setting-row">Temperature<select id="unit"><option value="fahrenheit">Fahrenheit</option><option value="celsius">Celsius</option></select></label><p class="hint">The clock follows the selected city’s time zone. Weather updates every 15 minutes.</p></section>
+      <section class="setting-section"><h3>Account</h3><p id="account-name" class="muted"></p><form id="password-form" class="stack-form"><input name="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" required><input name="newPassword" type="password" placeholder="New password (12+ characters)" autocomplete="new-password" minlength="12" required><button type="submit" class="secondary">Change password</button></form><p id="password-message" class="form-message" role="status"></p></section>
+      <section id="admin-section" class="setting-section" hidden><h3>Accounts</h3><p class="hint">Each account sees only photos in its own folder. Create the matching folder on the HDD.</p><div id="users-list" class="users-list"></div><form id="user-form" class="stack-form"><input name="username" placeholder="New username" pattern="[a-z][a-z0-9_-]{2,31}" required><input name="password" type="password" placeholder="Temporary password (12+ characters)" minlength="12" required><button class="secondary" type="submit">Add account</button></form><p id="user-message" class="form-message" role="status"></p></section>
+      <button id="logout" class="logout-button">Sign out <span aria-hidden="true">↗</span></button>
+    </div>
+  </aside>
+</body>
+</html>

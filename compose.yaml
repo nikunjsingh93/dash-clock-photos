@@ -1,0 +1,30 @@
+services:
+  dash-clock-photos:
+    build: .
+    image: ghcr.io/nikunjsingh93/dash-clock-photos:latest
+    container_name: dash-clock-photos
+    restart: unless-stopped
+    ports:
+      - "${DASH_PORT:-3080}:3080"
+    environment:
+      PORT: 3080
+      PHOTO_ROOT: /photos
+      STATE_DIR: /state
+      ADMIN_USERNAME: ${DASH_ADMIN_USERNAME:?Set DASH_ADMIN_USERNAME in .env}
+      ADMIN_PASSWORD: ${DASH_ADMIN_PASSWORD:?Set DASH_ADMIN_PASSWORD in .env}
+    volumes:
+      - type: bind
+        source: ${DASH_PHOTOS_PATH:?Set DASH_PHOTOS_PATH in .env}
+        target: /photos
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DASH_STATE_PATH:?Set DASH_STATE_PATH in .env}
+        target: /state
+        bind:
+          create_host_path: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
