@@ -48,7 +48,7 @@ function checkPassword(password, user) {
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 function validUsername(name) { return typeof name === 'string' && /^[a-z][a-z0-9_-]{2,31}$/.test(name); }
-function validPassword(value) { return typeof value === 'string' && value.length >= 12 && value.length <= 128; }
+function validPassword(value) { return typeof value === 'string' && value.length >= 8 && value.length <= 128; }
 function save() { atomicWrite(path.join(stateDir, 'users.json'), JSON.stringify(db, null, 2)); }
 
 if (!fs.existsSync(path.join(photoRoot, '.dash-clock-photos'))) {
@@ -64,7 +64,7 @@ if (fs.existsSync(stateFile)) db = JSON.parse(fs.readFileSync(stateFile, 'utf8')
 else {
   const name = process.env.ADMIN_USERNAME || 'admin';
   const password = process.env.ADMIN_PASSWORD;
-  if (!validUsername(name) || !validPassword(password)) throw new Error('First start requires ADMIN_USERNAME and an ADMIN_PASSWORD of at least 12 characters');
+  if (!validUsername(name) || !validPassword(password)) throw new Error('First start requires ADMIN_USERNAME and an ADMIN_PASSWORD of at least 8 characters');
   db = { users: [{ id: crypto.randomUUID(), username: name, folder: name, role: 'admin', sessionVersion: 1, weather: null, ...passwordHash(password) }] };
   save();
 }
@@ -97,11 +97,26 @@ function checkOrigin(req) {
     catch { fail(403, 'Invalid request origin'); }
   }
 }
-function getFolder(user) {
-  const folder = path.join(photoRoot, user.folder);
-  if (!fs.existsSync(folder)) return null;
-  if (!fs.lstatSync(folder).isDirectory() || fs.lstatSync(folder).isSymbolicLink()) return null;
+function resolveFolder(relative, allowRoot = false) {
+  if (relative === '' && allowRoot) return photoRoot;
+  if (typeof relative !== 'string' || !relative || relative.length > 512) return null;
+  const pieces = relative.split('/');
+  if (pieces.some(piece => !piece || piece === '.' || piece === '..' || piece.startsWith('.') || piece.includes('\\') || piece.includes('\0'))) return null;
+  let folder = photoRoot;
+  for (const piece of pieces) {
+    folder = path.join(folder, piece);
+    try {
+      const stat = fs.lstatSync(folder);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) return null;
+    } catch { return null; }
+  }
   return folder;
+}
+function getFolder(user) {
+  return resolveFolder(user.folder);
+}
+function folderIsAvailable(relative, exceptId = null) {
+  return !db.users.some(user => user.id !== exceptId && (user.folder === relative || user.folder.startsWith(`${relative}/`) || relative.startsWith(`${user.folder}/`)));
 }
 function photosFor(user) {
   const folder = getFolder(user);
@@ -225,9 +240,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'PUT' && route === '/api/password') {
       const user = requireUser(req);
+      requireAdmin(user);
       const { currentPassword, newPassword } = await readBody(req);
       if (!checkPassword(currentPassword || '', user)) fail(403, 'Current password is incorrect');
-      if (!validPassword(newPassword)) fail(400, 'Use a password of 12 to 128 characters');
+      if (!validPassword(newPassword)) fail(400, 'Use a password of 8 to 128 characters');
       Object.assign(user, passwordHash(newPassword));
       user.sessionVersion++;
       save();
@@ -237,15 +253,53 @@ const server = http.createServer(async (req, res) => {
       requireAdmin(requireUser(req));
       return send(res, 200, { users: db.users.map(safeUser) });
     }
+    if (req.method === 'GET' && route === '/api/folders') {
+      requireAdmin(requireUser(req));
+      const relative = url.searchParams.get('path') || '';
+      const folder = resolveFolder(relative, true);
+      if (!folder) fail(404, 'Folder not found in mounted photo library');
+      const folders = fs.readdirSync(folder, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && !entry.name.startsWith('.'))
+        .slice(0, 500)
+        .map(entry => ({ name: entry.name, path: relative ? `${relative}/${entry.name}` : entry.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return send(res, 200, { path: relative, parent: relative ? relative.split('/').slice(0, -1).join('/') : null, folders });
+    }
     if (req.method === 'POST' && route === '/api/users') {
       requireAdmin(requireUser(req));
-      const { username, password } = await readBody(req);
-      if (!validUsername(username) || !validPassword(password)) fail(400, 'Username must be 3–32 lowercase letters, digits, _ or -; password at least 12 characters');
+      const { username, password, folder } = await readBody(req);
+      if (!validUsername(username) || !validPassword(password)) fail(400, 'Username must be 3–32 lowercase letters, digits, _ or -; password at least 8 characters');
       if (db.users.some(u => u.username === username)) fail(409, 'Username already exists');
-      const user = { id: crypto.randomUUID(), username, folder: username, role: 'user', sessionVersion: 1, weather: null, ...passwordHash(password) };
+      if (!resolveFolder(folder)) fail(400, 'Choose an existing folder from the mounted photo library');
+      if (!folderIsAvailable(folder)) fail(409, 'That folder overlaps another account’s folder');
+      const user = { id: crypto.randomUUID(), username, folder, role: 'user', sessionVersion: 1, weather: null, ...passwordHash(password) };
       db.users.push(user);
       save();
       return send(res, 201, { user: safeUser(user) });
+    }
+    const passwordRoute = route.match(/^\/api\/users\/([^/]+)\/password$/);
+    if (req.method === 'PUT' && passwordRoute) {
+      requireAdmin(requireUser(req));
+      const target = db.users.find(user => user.id === passwordRoute[1] && user.role !== 'admin');
+      if (!target) fail(404, 'Account not found');
+      const { password } = await readBody(req);
+      if (!validPassword(password)) fail(400, 'Use a password of 8 to 128 characters');
+      Object.assign(target, passwordHash(password));
+      target.sessionVersion++;
+      save();
+      return send(res, 200, { ok: true });
+    }
+    const folderRoute = route.match(/^\/api\/users\/([^/]+)\/folder$/);
+    if (req.method === 'PUT' && folderRoute) {
+      requireAdmin(requireUser(req));
+      const target = db.users.find(user => user.id === folderRoute[1]);
+      if (!target) fail(404, 'Account not found');
+      const { folder } = await readBody(req);
+      if (!resolveFolder(folder)) fail(400, 'Choose an existing folder from the mounted photo library');
+      if (!folderIsAvailable(folder, target.id)) fail(409, 'That folder overlaps another account’s folder');
+      target.folder = folder;
+      save();
+      return send(res, 200, { user: safeUser(target) });
     }
     if (req.method === 'DELETE' && route.startsWith('/api/users/')) {
       const caller = requireUser(req);

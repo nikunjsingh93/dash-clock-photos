@@ -66,10 +66,31 @@
       <section class="setting-section"><div class="section-title"><h3>Photo library</h3><button id="refresh" class="text-button">Refresh</button></div><p id="library-info" class="muted"></p><p class="hint">Photos are read directly from your server’s mounted HDD. JPG, PNG, WebP, AVIF, and GIF are supported.</p></section>
       <section class="setting-section"><h3>Slideshow</h3><label class="setting-row">Change photo every<select id="interval"><option value="10">10 seconds</option><option value="20">20 seconds</option><option value="30" selected>30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option></select></label><label class="setting-row">Photo order<select id="order"><option value="shuffle">Shuffle</option><option value="newest">Newest first</option></select></label><label class="setting-row">Clock style<select id="clock-format"><option value="12">12 hour</option><option value="24">24 hour</option></select></label></section>
       <section class="setting-section"><h3>Weather & time zone</h3><p id="current-location" class="muted">No location set</p><form id="location-form" class="inline-form"><input id="location-query" placeholder="Search city or postal code" aria-label="City or postal code" required><button type="submit">Search</button></form><div id="location-results" class="location-results"></div><label class="setting-row">Temperature<select id="unit"><option value="fahrenheit">Fahrenheit</option><option value="celsius">Celsius</option></select></label><p class="hint">The clock follows the selected city’s time zone. Weather updates every 15 minutes.</p></section>
-      <section class="setting-section"><h3>Account</h3><p id="account-name" class="muted"></p><form id="password-form" class="stack-form"><input name="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" required><input name="newPassword" type="password" placeholder="New password (12+ characters)" autocomplete="new-password" minlength="12" required><button type="submit" class="secondary">Change password</button></form><p id="password-message" class="form-message" role="status"></p></section>
-      <section id="admin-section" class="setting-section" hidden><h3>Accounts</h3><p class="hint">Each account sees only photos in its own folder. Create the matching folder on the HDD.</p><div id="users-list" class="users-list"></div><form id="user-form" class="stack-form"><input name="username" placeholder="New username" pattern="[a-z][a-z0-9_-]{2,31}" required><input name="password" type="password" placeholder="Temporary password (12+ characters)" minlength="12" required><button class="secondary" type="submit">Add account</button></form><p id="user-message" class="form-message" role="status"></p></section>
+      <section id="admin-account-section" class="setting-section" hidden><h3>Admin account</h3><p id="account-name" class="muted"></p><form id="password-form" class="stack-form"><input name="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" required><input name="newPassword" type="password" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required><button type="submit" class="secondary">Change my password</button></form><p id="password-message" class="form-message" role="status"></p></section>
+      <section id="admin-section" class="setting-section" hidden>
+        <h3>Accounts</h3>
+        <p class="hint">Choose an existing folder from the mounted photo library for each account. Folders stay on disk when an account is removed.</p>
+        <div id="users-list" class="users-list"></div>
+        <form id="user-form" class="stack-form">
+          <input name="username" placeholder="New username" pattern="[a-z][a-z0-9_-]{2,31}" required>
+          <input name="password" type="password" placeholder="Temporary password (8+ characters)" minlength="8" required>
+          <input id="new-user-folder" name="folder" type="hidden">
+          <div class="folder-choice"><button id="choose-new-user-folder" class="secondary" type="button">Browse server folders</button><span id="new-user-folder-label" class="muted">No folder selected</span></div>
+          <button class="secondary" type="submit">Add account</button>
+        </form>
+        <p id="user-message" class="form-message" role="status"></p>
+      </section>
       <button id="logout" class="logout-button">Sign out <span aria-hidden="true">↗</span></button>
     </div>
   </aside>
+  <div id="folder-backdrop" class="folder-backdrop" hidden></div>
+  <section id="folder-dialog" class="folder-dialog" role="dialog" aria-modal="true" aria-label="Choose photo folder" hidden>
+    <header class="folder-dialog-header"><div><p class="eyebrow">SERVER PHOTO LIBRARY</p><h2>Choose a folder</h2></div><button id="folder-close" class="close-button" aria-label="Close folder browser">×</button></header>
+    <p class="hint">Folders on the mounted server drive appear here. Create a folder on the drive first if it is missing.</p>
+    <div class="folder-nav"><button id="folder-up" type="button">← Up</button><span id="folder-current">/photos</span></div>
+    <div id="folder-list" class="folder-list"></div>
+    <p id="folder-error" class="form-error" role="alert"></p>
+    <button id="folder-use" class="primary" type="button">Use this folder <span aria-hidden="true">→</span></button>
+  </section>
 </body>
 </html>

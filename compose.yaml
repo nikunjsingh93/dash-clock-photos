@@ -14,13 +14,13 @@ services:
       ADMIN_PASSWORD: ${DASH_ADMIN_PASSWORD:?Set DASH_ADMIN_PASSWORD in .env}
     volumes:
       - type: bind
-        source: ${DASH_PHOTOS_PATH:?Set DASH_PHOTOS_PATH in .env}
+        source: ${DASH_PHOTOS_PATH:-./photos}
         target: /photos
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: ${DASH_STATE_PATH:?Set DASH_STATE_PATH in .env}
+        source: ${DASH_STATE_PATH:-./state}
         target: /state
         bind:
           create_host_path: false

@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, timer: null, weatherTimer: null, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
+let folderTargetUserId = null;
+let browsedFolder = '';
 
 async function api(route, options = {}) {
   const response = await fetch(route, { credentials: 'same-origin', ...options, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
@@ -23,6 +25,7 @@ async function showDisplay(user) {
   setVisible('login', false);
   setVisible('display', true);
   $('account-name').textContent = `Signed in as ${user.username}`;
+  $('admin-account-section').hidden = user.role !== 'admin';
   $('admin-section').hidden = user.role !== 'admin';
   $('unit').value = user.weather?.unit || 'fahrenheit';
   $('current-location').textContent = user.weather?.label || 'No location set';
@@ -119,6 +122,42 @@ function updateClock() {
 function openPanel() { $('panel').classList.add('open'); $('panel').setAttribute('aria-hidden', 'false'); setVisible('panel-backdrop', true); }
 function closePanel() { $('panel').classList.remove('open'); $('panel').setAttribute('aria-hidden', 'true'); setVisible('panel-backdrop', false); }
 function message(id, value, isError = false) { $(id).textContent = value; $(id).style.color = isError ? '#b93c32' : '#3a7550'; }
+async function loadFolders(relative) {
+  try {
+    const data = await api(`/api/folders?path=${encodeURIComponent(relative)}`);
+    browsedFolder = data.path;
+    $('folder-current').textContent = `/photos${data.path ? `/${data.path}` : ''}`;
+    $('folder-up').disabled = data.parent === null;
+    $('folder-use').disabled = !data.path;
+    $('folder-error').textContent = '';
+    const list = $('folder-list'); list.replaceChildren();
+    if (!data.folders.length) {
+      const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = 'No subfolders here.'; list.append(empty);
+    }
+    for (const folder of data.folders) {
+      const button = document.createElement('button'); button.type = 'button';
+      button.textContent = `▱  ${folder.name}`;
+      button.addEventListener('click', () => loadFolders(folder.path));
+      list.append(button);
+    }
+  } catch (error) {
+    if (relative) {
+      await loadFolders('');
+      $('folder-error').textContent = 'That folder is not available on the mounted drive. Choose another folder.';
+    } else $('folder-error').textContent = error.message;
+  }
+}
+function openFolderPicker(user = null) {
+  folderTargetUserId = user?.id || null;
+  setVisible('folder-backdrop', true);
+  setVisible('folder-dialog', true);
+  loadFolders(user?.folder || '');
+}
+function closeFolderPicker() {
+  setVisible('folder-backdrop', false);
+  setVisible('folder-dialog', false);
+  folderTargetUserId = null;
+}
 async function loadUsers() {
   try {
     const { users } = await api('/api/users');
@@ -127,12 +166,31 @@ async function loadUsers() {
       const row = document.createElement('div'); row.className = 'user-row';
       const info = document.createElement('div'); info.textContent = user.username;
       const folder = document.createElement('small'); folder.textContent = `/photos/${user.folder}`; info.append(folder); row.append(info);
+      const actions = document.createElement('div'); actions.className = 'user-actions';
+      const choose = document.createElement('button'); choose.type = 'button'; choose.textContent = 'Change folder'; choose.addEventListener('click', () => openFolderPicker(user)); actions.append(choose);
       if (user.role !== 'admin') {
-        const remove = document.createElement('button'); remove.textContent = 'Remove';
+        const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset password';
+        const resetForm = document.createElement('form'); resetForm.className = 'reset-form'; resetForm.hidden = true;
+        const input = document.createElement('input'); input.type = 'password'; input.minLength = 8; input.maxLength = 128; input.required = true; input.placeholder = 'New password (8+)'; input.autocomplete = 'new-password';
+        const submit = document.createElement('button'); submit.type = 'submit'; submit.textContent = 'Save password';
+        resetForm.append(input, submit);
+        reset.addEventListener('click', () => { resetForm.hidden = !resetForm.hidden; if (!resetForm.hidden) input.focus(); });
+        resetForm.addEventListener('submit', async event => {
+          event.preventDefault();
+          try {
+            await api(`/api/users/${user.id}/password`, { method: 'PUT', body: JSON.stringify({ password: input.value }) });
+            input.value = ''; resetForm.hidden = true; message('user-message', `Password reset for ${user.username}. Existing sessions were signed out.`);
+          } catch (error) { message('user-message', error.message, true); }
+        });
+        actions.append(reset);
+        const remove = document.createElement('button'); remove.textContent = 'Remove'; remove.className = 'danger';
         remove.addEventListener('click', async () => {
           if (!confirm(`Remove account ${user.username}? Photos on disk will remain.`)) return;
           try { await api(`/api/users/${user.id}`, { method: 'DELETE' }); await loadUsers(); } catch (error) { message('user-message', error.message, true); }
-        }); row.append(remove);
+        }); actions.append(remove);
+        row.append(actions, resetForm);
+      } else {
+        row.append(actions);
       }
       list.append(row);
     }
@@ -196,12 +254,31 @@ $('password-form').addEventListener('submit', async event => {
 });
 $('user-form').addEventListener('submit', async event => {
   event.preventDefault();
-  try { const data = await api('/api/users', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.target))) }); event.target.reset(); message('user-message', `Created ${data.user.username}. Add photos to /photos/${data.user.folder} on the HDD.`); await loadUsers(); }
+  if (!$('new-user-folder').value) { message('user-message', 'Choose a photo folder first.', true); return; }
+  try { const data = await api('/api/users', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.target))) }); event.target.reset(); $('new-user-folder-label').textContent = 'No folder selected'; message('user-message', `Created ${data.user.username} with /photos/${data.user.folder}.`); await loadUsers(); }
   catch (error) { message('user-message', error.message, true); }
+});
+$('choose-new-user-folder').addEventListener('click', () => openFolderPicker());
+$('folder-close').addEventListener('click', closeFolderPicker);
+$('folder-backdrop').addEventListener('click', closeFolderPicker);
+$('folder-up').addEventListener('click', () => loadFolders(browsedFolder.split('/').slice(0, -1).join('/')));
+$('folder-use').addEventListener('click', async () => {
+  if (!browsedFolder) return;
+  if (folderTargetUserId) {
+    try {
+      const response = await api(`/api/users/${folderTargetUserId}/folder`, { method: 'PUT', body: JSON.stringify({ folder: browsedFolder }) });
+      if (state.user.id === response.user.id) { state.user = response.user; await loadPhotos(); }
+      closeFolderPicker(); await loadUsers(); message('user-message', `${response.user.username} now uses /photos/${browsedFolder}.`);
+    } catch (error) { $('folder-error').textContent = error.message; }
+  } else {
+    $('new-user-folder').value = browsedFolder;
+    $('new-user-folder-label').textContent = `/photos/${browsedFolder}`;
+    closeFolderPicker();
+  }
 });
 $('logout').addEventListener('click', async () => { try { await api('/api/logout', { method: 'POST', body: '{}' }); } finally { showLogin(); } });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closePanel();
+  if (event.key === 'Escape') { if (!$('folder-dialog').hidden) closeFolderPicker(); else closePanel(); }
   if (!state.user || $('panel').classList.contains('open') || ['INPUT', 'SELECT'].includes(document.activeElement.tagName)) return;
   if (event.key === 'ArrowRight') movePhoto(1);
   if (event.key === 'ArrowLeft') movePhoto(-1);

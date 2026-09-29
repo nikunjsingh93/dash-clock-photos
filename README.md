@@ -7,7 +7,8 @@ A private, self-hosted photo frame inspired by [DashClock](https://github.com/ni
 - Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls.
 - Current time and date in the selected city's time zone, with 12/24-hour choice.
 - Current temperature from [Open-Meteo](https://open-meteo.com/en/docs), cached by the backend for 15 minutes. City search uses [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api). Weather needs internet access from the container; photos and account data stay on your server.
-- Administrator-created accounts. Each account maps to `/photos/<username>` and photo URLs require that account's signed login cookie. The HDD is mounted read only. Account deletion leaves photos on disk.
+- Administrator-created accounts. Each account maps to a selected folder under `/photos`, and photo URLs require that account's signed login cookie. The HDD is mounted read only. Account deletion leaves photos on disk.
+- Administrators choose each account's existing photo folder from an in-app browser of the mounted server drive. Only administrators can change or reset passwords; the minimum password length is eight characters.
 - Docker Compose for local builds; a separate Portainer stack for the image published to GitHub Container Registry.
 
 ## Ubuntu setup
@@ -29,7 +30,7 @@ A private, self-hosted photo frame inspired by [DashClock](https://github.com/ni
    sudo chown 10001:10001 /var/lib/dash-clock-photos
    ```
 
-3. Copy `.env.example` to `.env`. Set `DASH_PHOTOS_PATH`, `DASH_STATE_PATH`, and a unique `DASH_ADMIN_PASSWORD` of at least 12 characters. The password is used **only to create the first account**; after that, change it in the app and remove or replace the bootstrap value in your deployment secrets. Existing account state lives in `/state/users.json`.
+3. Copy `.env.example` to `.env`. Set `DASH_PHOTOS_PATH` to the mounted HDD root, `DASH_STATE_PATH` to the SSD state directory, and a unique `DASH_ADMIN_PASSWORD` of at least eight characters. The password is used **only to create the first account**; after that, change it in the app and replace the bootstrap value in your deployment secrets. Existing account state lives in `/state/users.json`.
 
 4. In this project folder:
 
@@ -40,17 +41,21 @@ A private, self-hosted photo frame inspired by [DashClock](https://github.com/ni
 
    Open `http://UBUNTU-IP:3080`, sign in, and set your city in Settings. The health endpoint is `/api/health`.
 
-To add another account, sign in as admin and use **Settings → Accounts**. Then create the matching folder on the HDD, for example `/mnt/hdd/dash-clock-photos/alex`, and copy photos into it. Use **Refresh** in Settings to rescan without restarting.
+To add another account, first create a folder on the mounted HDD. Sign in as admin, use **Settings → Accounts → Browse server folders**, select that folder, and create the account. You can later change any account's folder or reset a non-admin password there. Use **Refresh** in Settings to rescan photos without restarting.
+
+The folder browser shows directories already mounted inside the container as `/photos`. A web browser's native folder picker would select a folder on the viewing device and cannot change Docker's host mount. The host HDD root must therefore be mounted once in the Compose/Portainer configuration. Account-specific folders are then selected inside the app.
 
 ## New GitHub repository and image
 
-This folder is an independent project. Create an empty GitHub repository named `dash-clock-photos` under `nikunjsingh93`, then push the `main` branch. The included workflow builds and pushes `ghcr.io/nikunjsingh93/dash-clock-photos:latest` on each push to `main`. The GitHub package may initially be private; make it public in package settings or give your Ubuntu/Portainer host GHCR credentials.
+This folder is an independent project, with `origin` set to the new `nikunjsingh93/dash-clock-photos` repository. When you are ready, push the `main` branch. The included workflow builds and pushes `ghcr.io/nikunjsingh93/dash-clock-photos:latest` on each push to `main`. The GitHub package may initially be private; make it public in package settings or give your Ubuntu/Portainer host GHCR credentials.
 
-For Portainer, add a Git stack pointing at this repository, branch `main`, Compose path `compose.prod.yaml`, and set the same five `DASH_*` variables from `.env.example`. The production stack pulls the GHCR image. To update after a push, pull and redeploy with image re-pull enabled. If you rename the GitHub repository, update the `image:` in `compose.prod.yaml`.
+For Portainer, add a Git stack pointing at this repository, branch `main`, Compose path `compose.prod.yaml`, and set `DASH_ADMIN_USERNAME`, `DASH_ADMIN_PASSWORD`, `DASH_PORT`, `DASH_PHOTOS_PATH`, and `DASH_STATE_PATH`. The last two are Docker host mount paths, not account folders. The production stack pulls the GHCR image. To update after a push, pull and redeploy with image re-pull enabled. If you rename the GitHub repository, update the `image:` in `compose.prod.yaml`.
 
 ## Local development
 
-Node 22+ is enough; there are no runtime packages to install. Create local `photos/admin` and `state` directories, add `photos/.dash-clock-photos`, then set `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD` to a 12+ character value and run `npm start`. On PowerShell, set those environment variables with `$env:ADMIN_USERNAME='admin'` and `$env:ADMIN_PASSWORD='...'` first. Run `npm test` for the API isolation checks.
+For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather settings, and the session signing key. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, add `photos/.dash-clock-photos`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
+
+For a direct Node run, Node 22+ is enough and there are no runtime packages to install. Set `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD` to an 8+ character value and run `npm start`. On PowerShell, set those environment variables with `$env:ADMIN_USERNAME='admin'` and `$env:ADMIN_PASSWORD='...'` first. Run `npm test` for the API isolation checks.
 
 ## Security and backups
 
