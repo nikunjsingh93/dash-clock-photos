@@ -2,6 +2,18 @@
 
 A private, self-hosted photo frame inspired by [DashClock](https://github.com/nikunjsingh93/dash_clock) and an ambient smart display. Full-screen photos rotate behind a large clock, date, and current temperature. Each login sees only its own folder on your Ubuntu server's HDD. DashClock is a browser-side Angular PWA; this project adds a separate Node server for accounts and protected photo delivery. The Docker/GHCR deployment follows the pattern used by [OnDevice Film Lab](https://github.com/nikunjsingh93/ondevice-film-lab).
 
+## Screenshots
+
+These captures use a demo account, sample photo, and illustrative New York weather.
+
+![Ambient photo display with clock and temperature](docs/screenshots/display.png)
+
+| Sign in | Display settings |
+| --- | --- |
+| ![Sign-in screen](docs/screenshots/login.png) | ![Slideshow, clock, and weather settings](docs/screenshots/settings.png) |
+
+![Administrator account and photo folder controls](docs/screenshots/accounts.png)
+
 ## MVP features
 
 - Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls.
