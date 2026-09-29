@@ -3,7 +3,7 @@ services:
     build: .
     image: ghcr.io/nikunjsingh93/dash-clock-photos:latest
     container_name: dash-clock-photos
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${DASH_PORT:-3080}:3080"
     environment:

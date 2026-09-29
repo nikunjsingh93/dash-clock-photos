@@ -25,33 +25,36 @@ These captures use a demo account, sample photo, and illustrative New York weath
 
 ## Ubuntu setup
 
-1. Choose an **already mounted** HDD path, for example `/mnt/hdd/dash-clock-photos`. Create the root, safety marker, and one folder for each account:
+1. Choose an existing photo root. If several drives are mounted under `/media/wvx`, use `/media/wvx` as the root so the admin can browse each drive and select an account-specific folder. Check that the drives are mounted before starting the container:
 
    ```bash
-   sudo mkdir -p /mnt/hdd/dash-clock-photos/admin
-   sudo touch /mnt/hdd/dash-clock-photos/.dash-clock-photos
-   sudo chmod -R a+rX /mnt/hdd/dash-clock-photos
+   ls -la /media/wvx
+   findmnt -rn -o TARGET | grep '^/media/wvx/'
    ```
 
-   Put photos in `admin/` or its subfolders. Supported formats are JPG/JPEG, PNG, WebP, AVIF, and GIF. HEIC/RAW need conversion to a browser-supported format. The marker makes the app refuse to start when the expected drive content is absent. Also ensure the HDD itself is mounted before starting Docker; use an Ubuntu mount unit or `/etc/fstab`.
+   No marker file is needed. The app checks that the configured photo root directory exists, but `/media/wvx` can exist while its drives are unmounted. If the drives do not mount automatically after reboot, leave the container stopped and start it manually in Portainer once they are mounted. The container runs as UID `10001` and needs read access to the chosen photo folders. Supported formats are JPG/JPEG, PNG, WebP, AVIF, and GIF; HEIC/RAW need conversion to a browser-supported format.
 
-2. Create state storage on the Ubuntu SSD or another local Linux filesystem. The container runs as UID/GID `10001`:
+2. Create state storage on the Ubuntu SSD or another local Linux filesystem. For example, alongside other apps in `dockerApps`:
 
    ```bash
-   sudo mkdir -p /var/lib/dash-clock-photos
-   sudo chown 10001:10001 /var/lib/dash-clock-photos
+   sudo mkdir -p /home/wvx/Documents/dockerApps/dash-clock-photos/state
+   sudo chown 10001:10001 /home/wvx/Documents/dockerApps/dash-clock-photos/state
+   sudo chmod 700 /home/wvx/Documents/dockerApps/dash-clock-photos/state
    ```
 
-3. Copy `.env.example` to `.env`. Set `DASH_PHOTOS_PATH` to the mounted HDD root, `DASH_STATE_PATH` to the SSD state directory, and a unique `DASH_ADMIN_PASSWORD` of at least eight characters. The password is used **only to create the first account**; after that, change it in the app and replace the bootstrap value in your deployment secrets. Existing account state lives in `/state/users.json`.
+3. In Portainer, create a Git stack from `https://github.com/nikunjsingh93/dash-clock-photos.git`, branch `main`, Compose path `compose.prod.yaml`. Enter these stack environment variables, choosing a unique password of at least eight characters:
 
-4. In this project folder:
-
-   ```bash
-   docker compose up -d --build
-   docker compose logs -f dash-clock-photos
+   ```ini
+   DASH_ADMIN_USERNAME=admin
+   DASH_ADMIN_PASSWORD=your-own-unique-password
+   DASH_PORT=3080
+   DASH_PHOTOS_PATH=/media/wvx
+   DASH_STATE_PATH=/home/wvx/Documents/dockerApps/dash-clock-photos/state
    ```
 
-   Open `http://UBUNTU-IP:3080`, sign in, and set your city in Settings. The health endpoint is `/api/health`.
+   Leave Portainer's GitOps automatic updates disabled so the stack starts only when you choose to deploy or start it. Deploy the stack after the drives are mounted. Open `http://UBUNTU-IP:3080`, sign in, then use **Settings → Accounts → Change folder** to select the admin's drive and photo folder. The health endpoint is `/api/health`. The bootstrap password is used **only to create the first account**; later password changes happen in the app. Existing account state lives in `/state/users.json`.
+
+4. The Compose files use `restart: "no"`. After a server reboot, mount the drives and then manually start the stopped container in Portainer. If a drive was mounted only after the container started and is not visible in the folder browser, recreate the container with **Pull and redeploy** after the drive is mounted.
 
 To add another account, first create a folder on the mounted HDD. Sign in as admin, use **Settings → Accounts → Browse server folders**, select that folder, and create the account. You can later change any account's folder or reset a non-admin password there. Use **Refresh** in Settings to rescan photos without restarting.
 
@@ -59,18 +62,18 @@ The folder browser shows directories already mounted inside the container as `/p
 
 ## New GitHub repository and image
 
-This folder is an independent project, with `origin` set to the new `nikunjsingh93/dash-clock-photos` repository. When you are ready, push the `main` branch. The included workflow builds and pushes `ghcr.io/nikunjsingh93/dash-clock-photos:latest` on each push to `main`. The GitHub package may initially be private; make it public in package settings or give your Ubuntu/Portainer host GHCR credentials.
+This folder is an independent project, with `origin` set to the `nikunjsingh93/dash-clock-photos` repository. The included workflow builds and pushes `ghcr.io/nikunjsingh93/dash-clock-photos:latest` on each push to `main`. The GitHub package may initially be private; make it public in package settings or give your Ubuntu/Portainer host GHCR credentials.
 
 For Portainer, add a Git stack pointing at this repository, branch `main`, Compose path `compose.prod.yaml`, and set `DASH_ADMIN_USERNAME`, `DASH_ADMIN_PASSWORD`, `DASH_PORT`, `DASH_PHOTOS_PATH`, and `DASH_STATE_PATH`. The last two are Docker host mount paths, not account folders. The production stack pulls the GHCR image. To update after a push, pull and redeploy with image re-pull enabled. If you rename the GitHub repository, update the `image:` in `compose.prod.yaml`.
 
 ## Local development
 
-For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather settings, and the session signing key. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, add `photos/.dash-clock-photos`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
+For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather settings, and the session signing key. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
 
 For a direct Node run, Node 22+ is enough and there are no runtime packages to install. Set `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD` to an 8+ character value and run `npm start`. On PowerShell, set those environment variables with `$env:ADMIN_USERNAME='admin'` and `$env:ADMIN_PASSWORD='...'` first. Run `npm test` for the API isolation checks.
 
 ## Security and backups
 
-Use this directly on a trusted LAN only. For remote access, put it behind HTTPS (for example Tailscale Serve or an HTTPS reverse proxy), set `COOKIE_SECURE=true`, and avoid public port forwarding. User passwords are salted with scrypt; cookies are signed and HTTP-only. Back up `/var/lib/dash-clock-photos` along with the HDD folders. Keep `.env` out of Git. The photo drive is never writable by the container.
+Use this directly on a trusted LAN only. For remote access, put it behind HTTPS (for example Tailscale Serve or an HTTPS reverse proxy), set `COOKIE_SECURE=true`, and avoid public port forwarding. User passwords are salted with scrypt; cookies are signed and HTTP-only. Back up the configured state folder along with the HDD folders. Keep `.env` out of Git. The photo drive is mounted read only by the container.
 
 The app reads up to 10,000 photo records per account per refresh. This MVP scans folders on demand and serves originals; very large libraries or high-resolution RAW workflows would benefit from thumbnails and an index in a later version.

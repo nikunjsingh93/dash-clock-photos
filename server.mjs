@@ -51,8 +51,8 @@ function validUsername(name) { return typeof name === 'string' && /^[a-z][a-z0-9
 function validPassword(value) { return typeof value === 'string' && value.length >= 8 && value.length <= 128; }
 function save() { atomicWrite(path.join(stateDir, 'users.json'), JSON.stringify(db, null, 2)); }
 
-if (!fs.existsSync(path.join(photoRoot, '.dash-clock-photos'))) {
-  throw new Error(`Photo mount is missing its .dash-clock-photos marker: ${photoRoot}`);
+if (!fs.existsSync(photoRoot) || !fs.statSync(photoRoot).isDirectory()) {
+  throw new Error(`Photo root directory is missing: ${photoRoot}`);
 }
 fs.mkdirSync(stateDir, { recursive: true });
 const stateFile = path.join(stateDir, 'users.json');

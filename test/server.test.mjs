@@ -12,7 +12,6 @@ test('accounts see only their own HDD folders', async () => {
   fs.mkdirSync(path.join(photos, 'admin'), { recursive: true });
   fs.mkdirSync(path.join(photos, 'alex'));
   fs.mkdirSync(path.join(photos, 'family', 'alex'), { recursive: true });
-  fs.writeFileSync(path.join(photos, '.dash-clock-photos'), '');
   fs.writeFileSync(path.join(photos, 'admin', 'secret.jpg'), 'admin photo');
   fs.writeFileSync(path.join(photos, 'alex', 'own.jpg'), 'alex photo');
   fs.writeFileSync(path.join(photos, 'family', 'alex', 'family.jpg'), 'family photo');
