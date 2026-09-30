@@ -14,7 +14,7 @@ const staticTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; ch
 const failures = new Map();
 const weatherCache = new Map();
 const previewJobs = new Map();
-const displayDefaults = Object.freeze({ sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null });
+const displayDefaults = Object.freeze({ sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null, secondClockSize: 'medium' });
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
 function send(res, status, value, headers = {}) {
@@ -300,15 +300,17 @@ const server = http.createServer(async (req, res) => {
         !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(display.sleepStart) ||
         !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(display.wakeTime) ||
         !['fit', 'fill-pan'].includes(display.photoFraming) ||
-        !['small', 'medium', 'large'].includes(display.clockSize) ||
-        !['small', 'medium', 'large'].includes(display.weatherSize) ||
+        !["tiny","extra-small","small","medium","large","extra-large","huge"].includes(display.clockSize) ||
+        !["tiny","extra-small","small","medium","large","extra-large","huge"].includes(display.weatherSize) ||
         !['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(display.infoPosition)) fail(400, 'Invalid display settings');
+      const secondClockSize = display.secondClockSize ?? user.display?.secondClockSize ?? 'medium';
+      if (!["tiny","extra-small","small","medium","large","extra-large","huge"].includes(secondClockSize)) fail(400, 'Invalid second clock size');
       const second = display.secondClock === undefined ? user.display?.secondClock || null : display.secondClock;
       if (second !== null) {
         if (!second || typeof second !== 'object' || typeof second.label !== 'string' || second.label.length < 2 || second.label.length > 120 || typeof second.timezone !== 'string' || second.timezone.length > 80) fail(400, 'Invalid second clock');
         try { new Intl.DateTimeFormat('en', { timeZone: second.timezone }); } catch { fail(400, 'Invalid second clock timezone'); }
       }
-      user.display = { sleepStart: display.sleepStart, wakeTime: display.wakeTime, photoFraming: display.photoFraming, clockSize: display.clockSize, weatherSize: display.weatherSize, infoPosition: display.infoPosition, secondClock: second ? { label: second.label, timezone: second.timezone } : null };
+      user.display = { sleepStart: display.sleepStart, wakeTime: display.wakeTime, photoFraming: display.photoFraming, clockSize: display.clockSize, weatherSize: display.weatherSize, infoPosition: display.infoPosition, secondClock: second ? { label: second.label, timezone: second.timezone } : null, secondClockSize };
       save();
       return send(res, 200, { user: safeUser(user) });
     }

@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, libraryTimer: null, libraryRevision: 0, refreshChecking: false, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
-const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null };
+const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null, secondClockSize: 'medium' };
 let displaySave = Promise.resolve();
 let persistedDisplay = displayDefaults;
 let displayVersion = 0;
@@ -165,11 +165,13 @@ function applyDisplayPrefs() {
   $('wake-time').value = display.wakeTime;
   $('photo-framing').value = display.photoFraming;
   $('clock-size').value = display.clockSize;
+  $('second-clock-size').value = display.secondClockSize;
   $('weather-size').value = display.weatherSize;
   $('info-position').value = display.infoPosition;
   $('second-location').textContent = display.secondClock?.label || 'No second clock set';
   setVisible('remove-second-clock', Boolean(display.secondClock));
   $('display').dataset.clockSize = display.clockSize;
+    $('display').dataset.secondClockSize = display.secondClockSize || 'medium';
   $('display').dataset.weatherSize = display.weatherSize;
   $('display').dataset.infoPosition = display.infoPosition;
   $('display').dataset.photoFraming = display.photoFraming;
@@ -338,6 +340,7 @@ function saveDisplaySettings(display) {
     const version = ++displayVersion;
     if (!/^\d{2}:\d{2}$/.test(display.sleepStart) || !/^\d{2}:\d{2}$/.test(display.wakeTime)) { message('display-message', 'Choose valid sleep and awake times.', true); return; }
     $('display').dataset.clockSize = display.clockSize;
+    $('display').dataset.secondClockSize = display.secondClockSize || 'medium';
     $('display').dataset.weatherSize = display.weatherSize;
     $('display').dataset.infoPosition = display.infoPosition;
     $('display').dataset.photoFraming = display.photoFraming;
@@ -366,8 +369,8 @@ function saveDisplaySettings(display) {
     });
     return displaySave;
 }
-for (const id of ['sleep-start', 'wake-time', 'photo-framing', 'clock-size', 'weather-size', 'info-position']) {
-  $(id).addEventListener('change', () => saveDisplaySettings({ sleepStart: $('sleep-start').value, wakeTime: $('wake-time').value, photoFraming: $('photo-framing').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value, secondClock: state.user.display?.secondClock || null }));
+for (const id of ['sleep-start', 'wake-time', 'photo-framing', 'clock-size', 'second-clock-size', 'weather-size', 'info-position']) {
+  $(id).addEventListener('change', () => saveDisplaySettings({ sleepStart: $('sleep-start').value, wakeTime: $('wake-time').value, photoFraming: $('photo-framing').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value, secondClock: state.user.display?.secondClock || null, secondClockSize: $('second-clock-size').value }));
 }
 $('second-location-form').addEventListener('submit', async event => {
   event.preventDefault();

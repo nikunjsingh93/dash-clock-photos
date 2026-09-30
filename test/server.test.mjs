@@ -30,7 +30,7 @@ test('accounts see only their own HDD folders', async () => {
     assert.equal(login.status, 200);
     const adminCookie = login.headers.get('set-cookie').split(';')[0];
     const adminHeaders = { Cookie: adminCookie, 'Content-Type': 'application/json' };
-    assert.deepEqual((await login.json()).user.display, { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null });
+    assert.deepEqual((await login.json()).user.display, { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null, secondClockSize: 'medium' });
     const folders = await (await request('/api/folders', { headers: { Cookie: adminCookie } })).json();
     assert.deepEqual(folders.folders.map(folder => folder.name), ['admin', 'alex', 'family']);
     const tooShort = await request('/api/users', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ username: 'short', password: 'seven77', folder: 'alex' }) });
@@ -53,7 +53,7 @@ test('accounts see only their own HDD folders', async () => {
     assert.equal((await request('/api/me', { headers: { Cookie: alexCookie } })).status, 200);
     assert.equal(JSON.parse(fs.readFileSync(path.join(state, 'users.json'), 'utf8')).users.find(user => user.id === alex.id).libraryRevision, 1);
     assert.equal((await request('/api/users/missing/refresh', { method: 'POST', headers: adminHeaders })).status, 404);
-    const display = { sleepStart: '23:15', wakeTime: '07:30', photoFraming: 'fill-pan', clockSize: 'large', weatherSize: 'small', infoPosition: 'top-right', secondClock: { label: 'Mumbai, India', timezone: 'Asia/Kolkata' } };
+    const display = { sleepStart: '23:15', wakeTime: '07:30', photoFraming: 'fill-pan', clockSize: 'large', weatherSize: 'small', infoPosition: 'top-right', secondClock: { label: 'Mumbai, India', timezone: 'Asia/Kolkata' }, secondClockSize: 'extra-large' };
     const savedDisplay = await request('/api/display', { method: 'PUT', headers: alexHeaders, body: JSON.stringify({ display }) });
     assert.equal(savedDisplay.status, 200);
     assert.deepEqual((await savedDisplay.json()).user.display, display);
