@@ -205,7 +205,7 @@ function updateClock() {
 }
 function openPanel() { $('panel').classList.add('open'); $('panel').setAttribute('aria-hidden', 'false'); setVisible('panel-backdrop', true); }
 function closePanel() { $('panel').classList.remove('open'); $('panel').setAttribute('aria-hidden', 'true'); setVisible('panel-backdrop', false); }
-function toggleFullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else $('display').requestFullscreen?.(); }
+function toggleFullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
 function syncFullscreenButtons() {
   const label = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   for (const id of ['fullscreen', 'sleep-fullscreen']) { $(id).title = label; $(id).setAttribute('aria-label', label); }
