@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+const cityName = label => (label || '').split(',')[0].trim();
 const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, libraryTimer: null, libraryRevision: 0, refreshChecking: false, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
 const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null, secondClockSize: 'medium' };
@@ -148,8 +149,8 @@ async function loadWeather() {
   try {
     state.weather = await api('/api/weather');
     if (!state.weather.configured) { $('temp').textContent = 'Weather off'; $('weather-description').textContent = 'Set your location in settings'; }
-    else if (state.weather.unavailable) { $('temp').textContent = 'Weather unavailable'; $('weather-description').textContent = state.weather.label; }
-    else { $('temp').textContent = `${weatherIcon(state.weather.code, state.weather.isDay)} ${Math.round(state.weather.temperature)}${state.weather.unit}`; $('weather-description').textContent = `${weatherText(state.weather.code, state.weather.isDay)} in ${state.weather.label}`; }
+    else if (state.weather.unavailable) { $('temp').textContent = 'Weather unavailable'; $('weather-description').textContent = cityName(state.weather.label); }
+    else { $('temp').textContent = `${weatherIcon(state.weather.code, state.weather.isDay)} ${Math.round(state.weather.temperature)}${state.weather.unit}`; $('weather-description').textContent = `${weatherText(state.weather.code, state.weather.isDay)} in ${cityName(state.weather.label)}`; }
     updateSleepWeather();
     updateClock();
   } catch { $('temp').textContent = 'Weather unavailable'; $('weather-description').textContent = ''; updateSleepWeather(); }
@@ -205,7 +206,7 @@ function updateClock() {
     const part = type => parts.find(p => p.type === type)?.value || '';
     $('second-time').textContent = `${part('hour')}:${part('minute')}`;
     $('second-ampm').textContent = prefs.clockFormat === '12' ? part('dayPeriod') : '';
-    $('second-zone').textContent = second.label;
+    $('second-zone').textContent = cityName(second.label);
   }
   $('date').textContent = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', ...(timezone ? { timeZone: timezone } : {}) }).format(now);
   const sleeping = sleepActive(now, timezone, state.user.display?.sleepStart || displayDefaults.sleepStart, state.user.display?.wakeTime || displayDefaults.wakeTime);
