@@ -188,6 +188,11 @@ function updateClock() {
 }
 function openPanel() { $('panel').classList.add('open'); $('panel').setAttribute('aria-hidden', 'false'); setVisible('panel-backdrop', true); }
 function closePanel() { $('panel').classList.remove('open'); $('panel').setAttribute('aria-hidden', 'true'); setVisible('panel-backdrop', false); }
+function toggleFullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else $('display').requestFullscreen?.(); }
+function syncFullscreenButtons() {
+  const label = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+  for (const id of ['fullscreen', 'sleep-fullscreen']) { $(id).title = label; $(id).setAttribute('aria-label', label); }
+}
 function message(id, value, isError = false) { $(id).textContent = value; $(id).style.color = isError ? '#b93c32' : '#3a7550'; }
 async function loadFolders(relative) {
   try {
@@ -284,7 +289,8 @@ $('empty-refresh').addEventListener('click', loadPhotos);
 $('previous').addEventListener('click', () => movePhoto(-1));
 $('next').addEventListener('click', () => movePhoto(1));
 $('play-pause').addEventListener('click', () => { state.playing = !state.playing; $('play-pause').textContent = state.playing ? 'Ⅱ' : '▶'; $('play-pause').title = state.playing ? 'Pause slideshow' : 'Play slideshow'; $('play-pause').setAttribute('aria-label', $('play-pause').title); schedule(); });
-$('fullscreen').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else $('display').requestFullscreen?.(); });
+for (const id of ['fullscreen', 'sleep-fullscreen']) $(id).addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', syncFullscreenButtons);
 $('interval').addEventListener('change', event => { prefs.interval = Number(event.target.value); localStorage.setItem('dash-interval', prefs.interval); schedule(); });
 $('order').addEventListener('change', event => { prefs.order = event.target.value; localStorage.setItem('dash-order', prefs.order); makeSequence(); showPhoto(); schedule(); });
 $('clock-format').addEventListener('change', event => { prefs.clockFormat = event.target.value; localStorage.setItem('dash-clock-format', prefs.clockFormat); updateClock(); });
