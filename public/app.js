@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, libraryTimer: null, libraryRevision: 0, refreshChecking: false, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
-const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' };
+const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left', secondClock: null };
 let displaySave = Promise.resolve();
 let persistedDisplay = displayDefaults;
 let displayVersion = 0;
@@ -167,6 +167,8 @@ function applyDisplayPrefs() {
   $('clock-size').value = display.clockSize;
   $('weather-size').value = display.weatherSize;
   $('info-position').value = display.infoPosition;
+  $('second-location').textContent = display.secondClock?.label || 'No second clock set';
+  setVisible('remove-second-clock', Boolean(display.secondClock));
   $('display').dataset.clockSize = display.clockSize;
   $('display').dataset.weatherSize = display.weatherSize;
   $('display').dataset.infoPosition = display.infoPosition;
@@ -194,6 +196,15 @@ function updateClock() {
   $('ampm').textContent = prefs.clockFormat === '12' ? value('dayPeriod') : '';
   $('sleep-clock').textContent = $('clock').textContent;
   $('sleep-ampm').textContent = $('ampm').textContent;
+  const second = state.user.display?.secondClock;
+  setVisible('second-clock', Boolean(second));
+  if (second) {
+    const parts = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: prefs.clockFormat === '12', timeZone: second.timezone }).formatToParts(now);
+    const part = type => parts.find(p => p.type === type)?.value || '';
+    $('second-time').textContent = `${part('hour')}:${part('minute')}`;
+    $('second-ampm').textContent = prefs.clockFormat === '12' ? part('dayPeriod') : '';
+    $('second-zone').textContent = second.label;
+  }
   $('date').textContent = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', ...(timezone ? { timeZone: timezone } : {}) }).format(now);
   const sleeping = sleepActive(now, timezone, state.user.display?.sleepStart || displayDefaults.sleepStart, state.user.display?.wakeTime || displayDefaults.wakeTime);
   if (sleeping !== state.sleeping) {
@@ -322,17 +333,17 @@ document.addEventListener('fullscreenchange', syncFullscreenButtons);
 $('interval').addEventListener('change', event => { prefs.interval = Number(event.target.value); localStorage.setItem('dash-interval', prefs.interval); schedule(); });
 $('order').addEventListener('change', event => { prefs.order = event.target.value; localStorage.setItem('dash-order', prefs.order); makeSequence(); showPhoto(); schedule(); });
 $('clock-format').addEventListener('change', event => { prefs.clockFormat = event.target.value; localStorage.setItem('dash-clock-format', prefs.clockFormat); updateClock(); });
-for (const id of ['sleep-start', 'wake-time', 'photo-framing', 'clock-size', 'weather-size', 'info-position']) {
-  $(id).addEventListener('change', () => {
+function saveDisplaySettings(display) {
     const userId = state.user.id;
     const version = ++displayVersion;
-    const display = { sleepStart: $('sleep-start').value, wakeTime: $('wake-time').value, photoFraming: $('photo-framing').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value };
     if (!/^\d{2}:\d{2}$/.test(display.sleepStart) || !/^\d{2}:\d{2}$/.test(display.wakeTime)) { message('display-message', 'Choose valid sleep and awake times.', true); return; }
     $('display').dataset.clockSize = display.clockSize;
     $('display').dataset.weatherSize = display.weatherSize;
     $('display').dataset.infoPosition = display.infoPosition;
     $('display').dataset.photoFraming = display.photoFraming;
     state.user.display = display;
+    $('second-location').textContent = display.secondClock?.label || 'No second clock set';
+    setVisible('remove-second-clock', Boolean(display.secondClock));
     updatePhotoFraming();
     updateClock();
     displaySave = displaySave.catch(() => {}).then(async () => {
@@ -353,8 +364,29 @@ for (const id of ['sleep-start', 'wake-time', 'photo-framing', 'clock-size', 'we
         message('display-message', error.message, true);
       }
     });
-  });
+    return displaySave;
 }
+for (const id of ['sleep-start', 'wake-time', 'photo-framing', 'clock-size', 'weather-size', 'info-position']) {
+  $(id).addEventListener('change', () => saveDisplaySettings({ sleepStart: $('sleep-start').value, wakeTime: $('wake-time').value, photoFraming: $('photo-framing').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value, secondClock: state.user.display?.secondClock || null }));
+}
+$('second-location-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const results = $('second-location-results'); results.replaceChildren(); results.textContent = 'Searching…';
+  try {
+    const { locations } = await api(`/api/locations?q=${encodeURIComponent($('second-location-query').value)}`);
+    results.replaceChildren();
+    if (!locations.length) results.textContent = 'No cities found.';
+    for (const location of locations) {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = location.label;
+      button.addEventListener('click', () => {
+        results.replaceChildren();
+        saveDisplaySettings({ ...displayDefaults, ...state.user.display, secondClock: { label: location.label, timezone: location.timezone } });
+      });
+      results.append(button);
+    }
+  } catch (error) { results.textContent = error.message; }
+});
+$('remove-second-clock').addEventListener('click', () => saveDisplaySettings({ ...displayDefaults, ...state.user.display, secondClock: null }));
 $('location-form').addEventListener('submit', async event => {
   event.preventDefault();
   const results = $('location-results'); results.replaceChildren(); results.textContent = 'Searching…';

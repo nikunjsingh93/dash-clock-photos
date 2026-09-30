@@ -29,6 +29,7 @@ For 4:3 landscapes on a wide screen, choose **Fit whole photo** or **Fill + gent
 - Current temperature from [Open-Meteo](https://open-meteo.com/en/docs), cached by the backend for 15 minutes. City search uses [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api). Weather needs internet access from the container; photos and account data stay on your server.
 - Administrator-created accounts. Each account maps to a selected folder under `/photos`, and photo URLs require that account's signed login cookie. The HDD is mounted read only. Account deletion leaves photos on disk.
 - Administrators choose each account's existing photo folder from an in-app browser of the mounted server drive. Only administrators can change or reset passwords; the minimum password length is eight characters.
+- Users can add a smaller second clock through **Settings → Second clock** by searching for a city. It appears at the top left in photo and night modes, and is saved to the account. Use **Remove second clock** to turn it off.
 - Docker Compose for local builds; a separate Portainer stack for the image published to GitHub Container Registry.
 
 ## Ubuntu setup
