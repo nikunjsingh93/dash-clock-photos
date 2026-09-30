@@ -14,7 +14,7 @@ const staticTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; ch
 const failures = new Map();
 const weatherCache = new Map();
 const previewJobs = new Map();
-const displayDefaults = Object.freeze({ sleepStart: '00:00', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' });
+const displayDefaults = Object.freeze({ sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' });
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
 function send(res, status, value, headers = {}) {
@@ -60,6 +60,10 @@ if (!fs.existsSync(photoRoot) || !fs.statSync(photoRoot).isDirectory()) {
 fs.mkdirSync(stateDir, { recursive: true });
 const previewDir = path.join(stateDir, 'previews');
 fs.mkdirSync(previewDir, { recursive: true, mode: 0o700 });
+// Older cache files cannot be associated with an account; discard them on upgrade.
+for (const name of fs.readdirSync(previewDir)) {
+  if (/^[a-f0-9]{64}\.webp$/.test(name)) { try { fs.rmSync(path.join(previewDir, name)); } catch { /* Cache can be rebuilt. */ } }
+}
 const stateFile = path.join(stateDir, 'users.json');
 const secretFile = path.join(stateDir, 'session.key');
 if (!fs.existsSync(secretFile)) atomicWrite(secretFile, crypto.randomBytes(32).toString('hex'));
@@ -123,15 +127,28 @@ function getFolder(user) {
 function folderIsAvailable(relative, exceptId = null) {
   return !db.users.some(user => user.id !== exceptId && (user.folder === relative || user.folder.startsWith(`${relative}/`) || relative.startsWith(`${user.folder}/`)));
 }
+function previewFileName(user, id, version) {
+  const hash = crypto.createHash('sha256').update(`webp-1080-v2\0${user.folder}\0${id}\0${version}`).digest('hex');
+  return `${user.id}-${hash}.webp`;
+}
+function prunePreviews(user, keep = null) {
+  const prefix = `${user.id}-`;
+  for (const name of fs.readdirSync(previewDir)) {
+    if (!name.startsWith(prefix) || name.length !== prefix.length + 69 || !name.endsWith('.webp') || keep?.has(name)) continue;
+    try { fs.rmSync(path.join(previewDir, name)); } catch { /* A preview in use can be retried on the next scan. */ }
+  }
+}
 function photosFor(user) {
   const folder = getFolder(user);
   if (!folder) return [];
   const result = [];
+  const keep = new Set();
+  let complete = true;
   const stack = [[folder, '']];
   while (stack.length && result.length < 10000) {
     const [dir, rel] = stack.pop();
     let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { complete = false; continue; }
     for (const entry of entries) {
       if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
       const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
@@ -139,12 +156,16 @@ function photosFor(user) {
       else if (entry.isFile() && photoTypes.has(path.extname(entry.name).toLowerCase())) {
         try {
           const stat = fs.statSync(path.join(dir, entry.name));
-          result.push({ id: Buffer.from(nextRel).toString('base64url'), name: entry.name, modified: stat.mtimeMs, url: `/api/photo/${Buffer.from(nextRel).toString('base64url')}?v=${Math.trunc(stat.mtimeMs)}-${stat.size}` });
-        } catch { /* File changed during scan. */ }
+          const id = Buffer.from(nextRel).toString('base64url');
+          const version = `${Math.trunc(stat.mtimeMs)}-${stat.size}`;
+          keep.add(previewFileName(user, id, version));
+          result.push({ id, name: entry.name, modified: stat.mtimeMs, url: `/api/photo/${id}?v=${version}` });
+        } catch { complete = false; }
       }
-      if (result.length >= 10000) break;
+      if (result.length >= 10000) { complete = false; break; }
     }
   }
+  if (complete) prunePreviews(user, keep);
   return result.sort((a, b) => b.modified - a.modified);
 }
 function photoPath(user, id) {
@@ -165,8 +186,8 @@ function photoPath(user, id) {
 }
 async function previewFor(user, id, version) {
   if (!/^[A-Za-z0-9_-]{1,2048}$/.test(id) || !/^\d{1,15}-\d{1,15}$/.test(version || '')) fail(404, 'Photo not found');
-  const key = crypto.createHash('sha256').update(`webp-1080-v1\0${user.folder}\0${id}\0${version}`).digest('hex');
-  const preview = path.join(previewDir, `${key}.webp`);
+  const key = previewFileName(user, id, version);
+  const preview = path.join(previewDir, key);
   if (fs.existsSync(preview)) return preview;
   if (!previewJobs.has(key)) {
     const work = (async () => {
@@ -274,10 +295,12 @@ const server = http.createServer(async (req, res) => {
       const { display } = await readBody(req);
       if (!display || typeof display !== 'object' || Array.isArray(display) ||
         !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(display.sleepStart) ||
+        !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(display.wakeTime) ||
+        !['fit', 'fill-pan'].includes(display.photoFraming) ||
         !['small', 'medium', 'large'].includes(display.clockSize) ||
         !['small', 'medium', 'large'].includes(display.weatherSize) ||
         !['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(display.infoPosition)) fail(400, 'Invalid display settings');
-      user.display = { sleepStart: display.sleepStart, clockSize: display.clockSize, weatherSize: display.weatherSize, infoPosition: display.infoPosition };
+      user.display = { sleepStart: display.sleepStart, wakeTime: display.wakeTime, photoFraming: display.photoFraming, clockSize: display.clockSize, weatherSize: display.weatherSize, infoPosition: display.infoPosition };
       save();
       return send(res, 200, { user: safeUser(user) });
     }
@@ -342,6 +365,7 @@ const server = http.createServer(async (req, res) => {
       if (!folderIsAvailable(folder, target.id)) fail(409, 'That folder overlaps another account’s folder');
       target.folder = folder;
       save();
+      prunePreviews(target);
       return send(res, 200, { user: safeUser(target) });
     }
     if (req.method === 'DELETE' && route.startsWith('/api/users/')) {
@@ -352,6 +376,7 @@ const server = http.createServer(async (req, res) => {
       if (!target || target.role === 'admin') fail(400, 'Cannot remove this account');
       db.users = db.users.filter(u => u.id !== id);
       save();
+      prunePreviews(target);
       return send(res, 200, { ok: true });
     }
     if (route.startsWith('/api/')) fail(404, 'Not found');

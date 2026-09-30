@@ -14,12 +14,18 @@ These captures use a demo account, sample photo, and illustrative New York weath
 
 ![Administrator account and photo folder controls](docs/screenshots/accounts.png)
 
+For 4:3 landscapes on a wide screen, choose **Fit whole photo** or **Fill + gentle pan** in Settings:
+
+| Fit whole photo | Fill + gentle pan |
+| --- | --- |
+| ![4:3 photo fitted with black side bars](docs/screenshots/fit-photo.png) | ![4:3 photo filling the screen during a gentle vertical pan](docs/screenshots/fill-pan.png) |
+
 ## MVP features
 
-- Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls. Photos fit within the screen without cropping; unused space is black.
+- Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls. Each account can choose Fit whole photo (no cropping, black borders) or Fill + gentle pan for 4:3 landscape photos on wide screens. Portraits always fit fully.
 - The server creates 1080p WebP display copies (up to 1920 × 1080, preserving aspect ratio) and serves those to the browser instead of full-resolution originals. The first request reads the HDD and writes a copy under `/state/previews`; later requests use the SSD cache. Photos are not uploaded to a third-party service.
 - Current time and date in the selected city's time zone, with 12/24-hour choice.
-- Per-account night clock: the default sleep time is 12:00 AM, when the screen turns black and shows a centered white clock with weather underneath. Photos resume at 6:00 AM. Each account can change its sleep time, clock and weather font sizes, and the clock/weather position in Settings. Choosing 6:00 AM as the sleep time keeps the slideshow on all day.
+- Per-account night clock: the default sleep time is 12:00 AM, when the screen turns black and shows a centered white clock with weather underneath. Photos resume at the awake time, 6:00 AM by default. Each account can change both times, clock and weather font sizes, and the clock/weather position in Settings. Matching sleep and awake times keep the slideshow on all day.
 - Current temperature from [Open-Meteo](https://open-meteo.com/en/docs), cached by the backend for 15 minutes. City search uses [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api). Weather needs internet access from the container; photos and account data stay on your server.
 - Administrator-created accounts. Each account maps to a selected folder under `/photos`, and photo URLs require that account's signed login cookie. The HDD is mounted read only. Account deletion leaves photos on disk.
 - Administrators choose each account's existing photo folder from an in-app browser of the mounted server drive. Only administrators can change or reset passwords; the minimum password length is eight characters.
@@ -78,4 +84,4 @@ For a direct Node run, use Node 22+, run `npm ci`, set `ADMIN_USERNAME=admin` an
 
 Use this directly on a trusted LAN only. For remote access, put it behind HTTPS (for example Tailscale Serve or an HTTPS reverse proxy), set `COOKIE_SECURE=true`, and avoid public port forwarding. User passwords are salted with scrypt; cookies are signed and HTTP-only. Back up `users.json` and `session.key` from the state folder along with the HDD folders; generated previews can be rebuilt. Keep `.env` out of Git. The photo drive is mounted read only by the container.
 
-The app reads up to 10,000 photo records per account per refresh. Preview files are generated as photos are viewed, so a large library can take time to warm and will use SSD space. You can remove only the generated `previews` subfolder from app state while the container is stopped; it will be rebuilt on demand. Do not remove `users.json` or `session.key`. Very large libraries or RAW workflows would benefit from a persistent photo index in a later version.
+The app reads up to 10,000 photo records per account per refresh. Preview files are generated as photos are viewed, so a large library can take time to warm and will use SSD space. Changing an account's folder or removing the account deletes that account's previews. A deleted or replaced photo's preview is removed on the next library Refresh or sign-in; a display already running may show its cached copy until then. You can also remove only the generated `previews` subfolder from app state while the container is stopped; it will be rebuilt on demand. Do not remove `users.json` or `session.key`. Very large libraries or RAW workflows would benefit from a persistent photo index in a later version.

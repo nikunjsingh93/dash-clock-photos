@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
-const displayDefaults = { sleepStart: '00:00', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' };
+const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' };
 let displaySave = Promise.resolve();
 let persistedDisplay = displayDefaults;
 let displayVersion = 0;
@@ -33,7 +33,7 @@ async function showDisplay(user) {
   displayVersion++;
   persistedDisplay = { ...displayDefaults, ...user.display };
   state.sleeping = false;
-  $('display').classList.remove('sleeping', 'has-photos');
+  $('display').classList.remove('sleeping', 'has-photos', 'single-photo');
   setVisible('sleep-view', false);
   setVisible('login', false);
   setVisible('display', true);
@@ -61,12 +61,21 @@ function makeSequence() {
   state.sequence = prefs.order === 'shuffle' ? shuffle(state.photos) : [...state.photos];
   state.index = 0;
 }
+function updatePhotoFraming() {
+  const display = $('display');
+  const screenRatio = display.clientWidth / display.clientHeight;
+  for (const photo of [$('photo-a'), $('photo-b')]) {
+    const photoRatio = photo.naturalWidth / photo.naturalHeight;
+    const shouldPan = state.user?.display?.photoFraming === 'fill-pan' && photoRatio > 1 && photoRatio < screenRatio - 0.02;
+    photo.classList.toggle('fill-pan', shouldPan);
+  }
+}
 function showPhoto() {
   const photo = state.sequence[state.index];
   if (!photo) return;
   const next = state.active ? $('photo-a') : $('photo-b');
   const previous = state.active ? $('photo-b') : $('photo-a');
-  next.onload = () => { next.classList.add('active'); previous.classList.remove('active'); state.active = state.active ? 0 : 1; };
+  next.onload = () => { updatePhotoFraming(); next.classList.add('active'); previous.classList.remove('active'); state.active = state.active ? 0 : 1; };
   next.onerror = () => { next.onload = null; next.classList.remove('active'); };
   next.src = photo.url;
   next.alt = photo.name;
@@ -80,6 +89,8 @@ function movePhoto(direction) {
 }
 function schedule() {
   clearInterval(state.timer);
+  $('display').style.setProperty('--pan-duration', `${prefs.interval}s`);
+  $('display').classList.toggle('paused', !state.playing);
   if (!state.sleeping && state.playing && state.sequence.length > 1) state.timer = setInterval(() => movePhoto(1), prefs.interval * 1000);
 }
 async function loadPhotos() {
@@ -89,6 +100,7 @@ async function loadPhotos() {
     makeSequence();
     const hasPhotos = photos.length > 0;
     $('display').classList.toggle('has-photos', hasPhotos);
+    $('display').classList.toggle('single-photo', photos.length === 1);
     setVisible('empty', !hasPhotos);
     $('folder-hint').textContent = `/photos/${folder}`;
     $('library-info').textContent = `${photos.length.toLocaleString()} photo${photos.length === 1 ? '' : 's'} in /photos/${folder}`;
@@ -133,20 +145,25 @@ function updateSleepWeather() {
 function applyDisplayPrefs() {
   const display = { ...displayDefaults, ...state.user?.display };
   $('sleep-start').value = display.sleepStart;
+  $('wake-time').value = display.wakeTime;
+  $('photo-framing').value = display.photoFraming;
   $('clock-size').value = display.clockSize;
   $('weather-size').value = display.weatherSize;
   $('info-position').value = display.infoPosition;
   $('display').dataset.clockSize = display.clockSize;
   $('display').dataset.weatherSize = display.weatherSize;
   $('display').dataset.infoPosition = display.infoPosition;
+  $('display').dataset.photoFraming = display.photoFraming;
+  updatePhotoFraming();
 }
-function sleepActive(now, timezone, start) {
+function sleepActive(now, timezone, start, wake) {
   const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timezone ? { timeZone: timezone } : {}) }).formatToParts(now);
   const value = type => Number(parts.find(part => part.type === type)?.value);
   const minute = value('hour') * 60 + value('minute');
   const [hour, minutes] = start.split(':').map(Number);
   const from = hour * 60 + minutes;
-  const until = 6 * 60;
+  const [wakeHour, wakeMinutes] = wake.split(':').map(Number);
+  const until = wakeHour * 60 + wakeMinutes;
   if (from === until) return false;
   return from < until ? minute >= from && minute < until : minute >= from || minute < until;
 }
@@ -161,7 +178,7 @@ function updateClock() {
   $('sleep-clock').textContent = $('clock').textContent;
   $('sleep-ampm').textContent = $('ampm').textContent;
   $('date').textContent = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', ...(timezone ? { timeZone: timezone } : {}) }).format(now);
-  const sleeping = sleepActive(now, timezone, state.user.display?.sleepStart || displayDefaults.sleepStart);
+  const sleeping = sleepActive(now, timezone, state.user.display?.sleepStart || displayDefaults.sleepStart, state.user.display?.wakeTime || displayDefaults.wakeTime);
   if (sleeping !== state.sleeping) {
     state.sleeping = sleeping;
     $('display').classList.toggle('sleeping', sleeping);
@@ -271,16 +288,18 @@ $('fullscreen').addEventListener('click', () => { if (document.fullscreenElement
 $('interval').addEventListener('change', event => { prefs.interval = Number(event.target.value); localStorage.setItem('dash-interval', prefs.interval); schedule(); });
 $('order').addEventListener('change', event => { prefs.order = event.target.value; localStorage.setItem('dash-order', prefs.order); makeSequence(); showPhoto(); schedule(); });
 $('clock-format').addEventListener('change', event => { prefs.clockFormat = event.target.value; localStorage.setItem('dash-clock-format', prefs.clockFormat); updateClock(); });
-for (const id of ['sleep-start', 'clock-size', 'weather-size', 'info-position']) {
+for (const id of ['sleep-start', 'wake-time', 'photo-framing', 'clock-size', 'weather-size', 'info-position']) {
   $(id).addEventListener('change', () => {
     const userId = state.user.id;
     const version = ++displayVersion;
-    const display = { sleepStart: $('sleep-start').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value };
-    if (!/^\d{2}:\d{2}$/.test(display.sleepStart)) { message('display-message', 'Choose a valid sleep time.', true); return; }
+    const display = { sleepStart: $('sleep-start').value, wakeTime: $('wake-time').value, photoFraming: $('photo-framing').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value };
+    if (!/^\d{2}:\d{2}$/.test(display.sleepStart) || !/^\d{2}:\d{2}$/.test(display.wakeTime)) { message('display-message', 'Choose valid sleep and awake times.', true); return; }
     $('display').dataset.clockSize = display.clockSize;
     $('display').dataset.weatherSize = display.weatherSize;
     $('display').dataset.infoPosition = display.infoPosition;
+    $('display').dataset.photoFraming = display.photoFraming;
     state.user.display = display;
+    updatePhotoFraming();
     updateClock();
     displaySave = displaySave.catch(() => {}).then(async () => {
       if (state.user?.id !== userId) return;
@@ -367,4 +386,5 @@ document.addEventListener('keydown', event => {
   if (event.key === ' ') { event.preventDefault(); $('play-pause').click(); }
 });
 setInterval(updateClock, 1000);
+window.addEventListener('resize', updatePhotoFraming);
 api('/api/me').then(data => showDisplay(data.user)).catch(showLogin);
