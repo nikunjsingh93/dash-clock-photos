@@ -1,7 +1,9 @@
 FROM node:24-alpine
 ENV NODE_ENV=production PORT=3080 PHOTO_ROOT=/photos STATE_DIR=/state
 WORKDIR /app
-COPY package.json server.mjs ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY server.mjs ./
 COPY public ./public
 RUN addgroup -S app && adduser -S -G app -u 10001 app
 USER app

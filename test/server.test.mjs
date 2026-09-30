@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import sharp from 'sharp';
 
 test('accounts see only their own HDD folders', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-clock-test-'));
@@ -12,9 +13,10 @@ test('accounts see only their own HDD folders', async () => {
   fs.mkdirSync(path.join(photos, 'admin'), { recursive: true });
   fs.mkdirSync(path.join(photos, 'alex'));
   fs.mkdirSync(path.join(photos, 'family', 'alex'), { recursive: true });
-  fs.writeFileSync(path.join(photos, 'admin', 'secret.jpg'), 'admin photo');
-  fs.writeFileSync(path.join(photos, 'alex', 'own.jpg'), 'alex photo');
-  fs.writeFileSync(path.join(photos, 'family', 'alex', 'family.jpg'), 'family photo');
+  const samplePhoto = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#587688' } }).jpeg({ quality: 90 }).toBuffer();
+  fs.writeFileSync(path.join(photos, 'admin', 'secret.jpg'), samplePhoto);
+  fs.writeFileSync(path.join(photos, 'alex', 'own.jpg'), samplePhoto);
+  fs.writeFileSync(path.join(photos, 'family', 'alex', 'family.jpg'), samplePhoto);
   const port = 20000 + Math.floor(Math.random() * 20000);
   const child = spawn(process.execPath, ['server.mjs'], { cwd: path.resolve('.'), env: { ...process.env, PORT: String(port), PHOTO_ROOT: photos, STATE_DIR: state, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'correct-horse-battery' }, stdio: 'pipe' });
   const base = `http://127.0.0.1:${port}`;
@@ -53,7 +55,22 @@ test('accounts see only their own HDD folders', async () => {
     const adminList = await (await request('/api/photos', { headers: { Cookie: adminCookie } })).json();
     assert.deepEqual(adminList.photos.map(p => p.name), ['secret.jpg']);
     assert.equal((await request(adminList.photos[0].url, { headers: { Cookie: alexCookie } })).status, 404);
-    assert.equal((await request(alexList.photos[0].url, { headers: { Cookie: alexCookie } })).status, 200);
+    const previewResponse = await request(alexList.photos[0].url, { headers: { Cookie: alexCookie } });
+    assert.equal(previewResponse.status, 200);
+    assert.equal(previewResponse.headers.get('content-type'), 'image/webp');
+    const previewBytes = Buffer.from(await previewResponse.arrayBuffer());
+    assert.ok(previewBytes.length < samplePhoto.length);
+    const previewMetadata = await sharp(previewBytes).metadata();
+    assert.deepEqual([previewMetadata.width, previewMetadata.height], [1440, 1080]);
+    assert.equal(fs.readdirSync(path.join(state, 'previews')).length, 1);
+    const cachedResponse = await request(alexList.photos[0].url, { headers: { Cookie: alexCookie } });
+    assert.equal(cachedResponse.status, 200);
+    await cachedResponse.arrayBuffer();
+    assert.equal(fs.readdirSync(path.join(state, 'previews')).length, 1);
+    const adminPreview = await request(adminList.photos[0].url, { headers: { Cookie: adminCookie } });
+    assert.equal(adminPreview.status, 200);
+    await adminPreview.arrayBuffer();
+    assert.equal((await request(adminList.photos[0].url, { headers: { Cookie: alexCookie } })).status, 404);
     assert.equal((await request('/api/users', { headers: { Cookie: alexCookie } })).status, 403);
     assert.equal((await request('/api/folders', { headers: { Cookie: alexCookie } })).status, 403);
     assert.equal((await request('/api/password', { method: 'PUT', headers: { Cookie: alexCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: 'eight888', newPassword: 'change123' }) })).status, 403);

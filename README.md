@@ -17,6 +17,7 @@ These captures use a demo account, sample photo, and illustrative New York weath
 ## MVP features
 
 - Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls. Photos fit within the screen without cropping; unused space is black.
+- The server creates 1080p WebP display copies (up to 1920 × 1080, preserving aspect ratio) and serves those to the browser instead of full-resolution originals. The first request reads the HDD and writes a copy under `/state/previews`; later requests use the SSD cache. Photos are not uploaded to a third-party service.
 - Current time and date in the selected city's time zone, with 12/24-hour choice.
 - Per-account night clock: the default sleep time is 12:00 AM, when the screen turns black and shows a centered white clock with weather underneath. Photos resume at 6:00 AM. Each account can change its sleep time, clock and weather font sizes, and the clock/weather position in Settings. Choosing 6:00 AM as the sleep time keeps the slideshow on all day.
 - Current temperature from [Open-Meteo](https://open-meteo.com/en/docs), cached by the backend for 15 minutes. City search uses [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api). Weather needs internet access from the container; photos and account data stay on your server.
@@ -69,12 +70,12 @@ For Portainer, add a Git stack pointing at this repository, branch `main`, Compo
 
 ## Local development
 
-For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather and display settings, and the session signing key. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
+For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather and display settings, the session signing key, and generated preview copies. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
 
-For a direct Node run, Node 22+ is enough and there are no runtime packages to install. Set `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD` to an 8+ character value and run `npm start`. On PowerShell, set those environment variables with `$env:ADMIN_USERNAME='admin'` and `$env:ADMIN_PASSWORD='...'` first. Run `npm test` for the API isolation checks.
+For a direct Node run, use Node 22+, run `npm ci`, set `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD` to an 8+ character value, then run `npm start`. On PowerShell, set those environment variables with `$env:ADMIN_USERNAME='admin'` and `$env:ADMIN_PASSWORD='...'` first. Run `npm test` for the API isolation and preview checks.
 
 ## Security and backups
 
-Use this directly on a trusted LAN only. For remote access, put it behind HTTPS (for example Tailscale Serve or an HTTPS reverse proxy), set `COOKIE_SECURE=true`, and avoid public port forwarding. User passwords are salted with scrypt; cookies are signed and HTTP-only. Back up the configured state folder along with the HDD folders. Keep `.env` out of Git. The photo drive is mounted read only by the container.
+Use this directly on a trusted LAN only. For remote access, put it behind HTTPS (for example Tailscale Serve or an HTTPS reverse proxy), set `COOKIE_SECURE=true`, and avoid public port forwarding. User passwords are salted with scrypt; cookies are signed and HTTP-only. Back up `users.json` and `session.key` from the state folder along with the HDD folders; generated previews can be rebuilt. Keep `.env` out of Git. The photo drive is mounted read only by the container.
 
-The app reads up to 10,000 photo records per account per refresh. This MVP scans folders on demand and serves originals; very large libraries or high-resolution RAW workflows would benefit from thumbnails and an index in a later version.
+The app reads up to 10,000 photo records per account per refresh. Preview files are generated as photos are viewed, so a large library can take time to warm and will use SSD space. You can remove only the generated `previews` subfolder from app state while the container is stopped; it will be rebuilt on demand. Do not remove `users.json` or `session.key`. Very large libraries or RAW workflows would benefit from a persistent photo index in a later version.

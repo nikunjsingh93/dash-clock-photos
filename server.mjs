@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const photoRoot = path.resolve(process.env.PHOTO_ROOT || path.join(here, 'photos'));
@@ -12,6 +13,7 @@ const photoTypes = new Map([['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.
 const staticTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
 const failures = new Map();
 const weatherCache = new Map();
+const previewJobs = new Map();
 const displayDefaults = Object.freeze({ sleepStart: '00:00', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' });
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
@@ -56,6 +58,8 @@ if (!fs.existsSync(photoRoot) || !fs.statSync(photoRoot).isDirectory()) {
   throw new Error(`Photo root directory is missing: ${photoRoot}`);
 }
 fs.mkdirSync(stateDir, { recursive: true });
+const previewDir = path.join(stateDir, 'previews');
+fs.mkdirSync(previewDir, { recursive: true, mode: 0o700 });
 const stateFile = path.join(stateDir, 'users.json');
 const secretFile = path.join(stateDir, 'session.key');
 if (!fs.existsSync(secretFile)) atomicWrite(secretFile, crypto.randomBytes(32).toString('hex'));
@@ -135,7 +139,7 @@ function photosFor(user) {
       else if (entry.isFile() && photoTypes.has(path.extname(entry.name).toLowerCase())) {
         try {
           const stat = fs.statSync(path.join(dir, entry.name));
-          result.push({ id: Buffer.from(nextRel).toString('base64url'), name: entry.name, modified: stat.mtimeMs, url: `/api/photo/${Buffer.from(nextRel).toString('base64url')}` });
+          result.push({ id: Buffer.from(nextRel).toString('base64url'), name: entry.name, modified: stat.mtimeMs, url: `/api/photo/${Buffer.from(nextRel).toString('base64url')}?v=${Math.trunc(stat.mtimeMs)}-${stat.size}` });
         } catch { /* File changed during scan. */ }
       }
       if (result.length >= 10000) break;
@@ -158,6 +162,32 @@ function photoPath(user, id) {
   }
   if (!fs.statSync(current).isFile() || !photoTypes.has(path.extname(current).toLowerCase())) fail(404, 'Photo not found');
   return current;
+}
+async function previewFor(user, id, version) {
+  if (!/^[A-Za-z0-9_-]{1,2048}$/.test(id) || !/^\d{1,15}-\d{1,15}$/.test(version || '')) fail(404, 'Photo not found');
+  const key = crypto.createHash('sha256').update(`webp-1080-v1\0${user.folder}\0${id}\0${version}`).digest('hex');
+  const preview = path.join(previewDir, `${key}.webp`);
+  if (fs.existsSync(preview)) return preview;
+  if (!previewJobs.has(key)) {
+    const work = (async () => {
+      const file = photoPath(user, id);
+      const stat = fs.statSync(file);
+      if (`${Math.trunc(stat.mtimeMs)}-${stat.size}` !== version) fail(404, 'Photo changed; refresh the library');
+      const temp = path.join(previewDir, `${key}.${crypto.randomUUID()}.webp`);
+      try {
+        await sharp(file, { animated: path.extname(file).toLowerCase() === '.gif' })
+          .rotate()
+          .resize({ width: 1920, height: 1080, fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 84, effort: 4 })
+          .toFile(temp);
+        fs.renameSync(temp, preview);
+      } finally { fs.rmSync(temp, { force: true }); }
+      return preview;
+    })();
+    previewJobs.set(key, work);
+    work.finally(() => previewJobs.delete(key)).catch(() => {});
+  }
+  return previewJobs.get(key);
 }
 async function weatherFor(user) {
   const location = user.weather;
@@ -211,9 +241,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && route.startsWith('/api/photo/')) {
       const user = requireUser(req);
-      const file = photoPath(user, route.slice('/api/photo/'.length));
+      const file = await previewFor(user, route.slice('/api/photo/'.length), url.searchParams.get('v'));
       const stat = fs.statSync(file);
-      res.writeHead(200, { 'Content-Type': photoTypes.get(path.extname(file).toLowerCase()), 'Content-Length': stat.size, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+      res.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': stat.size, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
       return fs.createReadStream(file).pipe(res);
     }
     if (req.method === 'GET' && route === '/api/weather') return send(res, 200, await weatherFor(requireUser(req)));
