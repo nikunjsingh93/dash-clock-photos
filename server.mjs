@@ -98,7 +98,7 @@ function sessionUser(req) {
 }
 function requireUser(req) { return sessionUser(req) || fail(401, 'Please sign in'); }
 function requireAdmin(user) { if (user.role !== 'admin') fail(403, 'Administrator access required'); }
-function safeUser(user) { return { id: user.id, username: user.username, folder: user.folder, role: user.role, weather: user.weather, display: { ...displayDefaults, ...user.display } }; }
+function safeUser(user) { return { id: user.id, username: user.username, folder: user.folder, role: user.role, weather: user.weather, libraryRevision: user.libraryRevision || 0, display: { ...displayDefaults, ...user.display } }; }
 function checkOrigin(req) {
   const origin = req.headers.origin;
   if (origin) {
@@ -256,6 +256,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true }, { 'Set-Cookie': 'dash_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' });
     }
     if (req.method === 'GET' && route === '/api/me') return send(res, 200, { user: safeUser(requireUser(req)) });
+    if (req.method === 'GET' && route === '/api/library-revision') {
+      return send(res, 200, { revision: requireUser(req).libraryRevision || 0 });
+    }
     if (req.method === 'GET' && route === '/api/photos') {
       const user = requireUser(req);
       return send(res, 200, { photos: photosFor(user), folder: user.folder });
@@ -355,6 +358,15 @@ const server = http.createServer(async (req, res) => {
       save();
       return send(res, 200, { ok: true });
     }
+    const refreshRoute = route.match(/^\/api\/users\/([^/]+)\/refresh$/);
+    if (req.method === 'POST' && refreshRoute) {
+      requireAdmin(requireUser(req));
+      const target = db.users.find(user => user.id === refreshRoute[1] && user.role !== 'admin');
+      if (!target) fail(404, 'Account not found');
+      target.libraryRevision = (target.libraryRevision || 0) + 1;
+      save();
+      return send(res, 200, { ok: true, revision: target.libraryRevision });
+    }
     const folderRoute = route.match(/^\/api\/users\/([^/]+)\/folder$/);
     if (req.method === 'PUT' && folderRoute) {
       requireAdmin(requireUser(req));
@@ -364,6 +376,7 @@ const server = http.createServer(async (req, res) => {
       if (!resolveFolder(folder)) fail(400, 'Choose an existing folder from the mounted photo library');
       if (!folderIsAvailable(folder, target.id)) fail(409, 'That folder overlaps another account’s folder');
       target.folder = folder;
+      target.libraryRevision = (target.libraryRevision || 0) + 1;
       save();
       prunePreviews(target);
       return send(res, 200, { user: safeUser(target) });

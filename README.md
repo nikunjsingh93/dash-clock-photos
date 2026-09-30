@@ -64,7 +64,7 @@ For 4:3 landscapes on a wide screen, choose **Fit whole photo** or **Fill + gent
 
 4. The Compose files use `restart: "no"`. After a server reboot, mount the drives and then manually start the stopped container in Portainer. If a drive was mounted only after the container started and is not visible in the folder browser, recreate the container with **Pull and redeploy** after the drive is mounted.
 
-To add another account, first create a folder on the mounted HDD. Sign in as admin, use **Settings → Accounts → Browse server folders**, select that folder, and create the account. You can later change any account's folder or reset a non-admin password there. Use **Refresh** in Settings to rescan photos without restarting.
+To add another account, first create a folder on the mounted HDD. Sign in as admin, use **Settings → Accounts → Browse server folders**, select that folder, and create the account. You can later change any account's folder or reset a non-admin password there. Use **Refresh display** beside an account to make its open displays rescan the photo folder within about 10 seconds, without needing that account's password. The **Refresh** button under Photo library rescans only the current display. A display that is offline will scan its folder when it next signs in.
 
 The folder browser shows directories already mounted inside the container as `/photos`. A web browser's native folder picker would select a folder on the viewing device and cannot change Docker's host mount. The host HDD root must therefore be mounted once in the Compose/Portainer configuration. Account-specific folders are then selected inside the app.
 

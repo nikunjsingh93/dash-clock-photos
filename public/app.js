@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, weather: null };
+const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, libraryTimer: null, libraryRevision: 0, refreshChecking: false, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
 const displayDefaults = { sleepStart: '00:00', wakeTime: '06:00', photoFraming: 'fit', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' };
 let displaySave = Promise.resolve();
@@ -24,12 +24,14 @@ function showLogin() {
   setVisible('sleep-view', false);
   clearInterval(state.timer);
   clearInterval(state.weatherTimer);
+  clearInterval(state.libraryTimer);
   setVisible('display', false);
   setVisible('login', true);
   closePanel();
 }
 async function showDisplay(user) {
   state.user = user;
+  state.libraryRevision = user.libraryRevision || 0;
   displayVersion++;
   persistedDisplay = { ...displayDefaults, ...user.display };
   state.sleeping = false;
@@ -50,6 +52,8 @@ async function showDisplay(user) {
   await Promise.all([loadPhotos(), loadWeather()]);
   clearInterval(state.weatherTimer);
   state.weatherTimer = setInterval(loadWeather, 15 * 60000);
+  clearInterval(state.libraryTimer);
+  state.libraryTimer = setInterval(checkRemoteRefresh, 10000);
   if (user.role === 'admin') loadUsers();
 }
 function shuffle(items) {
@@ -108,7 +112,20 @@ async function loadPhotos() {
     if (hasPhotos) showPhoto();
     else { $('photo-a').removeAttribute('src'); $('photo-b').removeAttribute('src'); $('photo-a').classList.remove('active'); $('photo-b').classList.remove('active'); }
     schedule();
-  } catch (error) { if (error.message === 'Please sign in') showLogin(); else $('library-info').textContent = error.message; }
+    return true;
+  } catch (error) { if (error.message === 'Please sign in') showLogin(); else $('library-info').textContent = error.message; return false; }
+}
+async function checkRemoteRefresh() {
+  const userId = state.user?.id;
+  if (!userId || state.refreshChecking) return;
+  state.refreshChecking = true;
+  try {
+    const { revision } = await api('/api/library-revision');
+    if (state.user?.id !== userId) return;
+    if (revision !== state.libraryRevision && await loadPhotos()) state.libraryRevision = revision;
+  } catch (error) {
+    if (state.user?.id === userId && error.message === 'Please sign in') showLogin();
+  } finally { state.refreshChecking = false; }
 }
 function weatherText(code, isDay) {
   if (code === 0) return isDay ? 'Sunny' : 'Clear night';
@@ -241,6 +258,17 @@ async function loadUsers() {
       const actions = document.createElement('div'); actions.className = 'user-actions';
       const choose = document.createElement('button'); choose.type = 'button'; choose.textContent = 'Change folder'; choose.addEventListener('click', () => openFolderPicker(user)); actions.append(choose);
       if (user.role !== 'admin') {
+        const refresh = document.createElement('button'); refresh.type = 'button'; refresh.textContent = 'Refresh display';
+        refresh.title = 'Tell open displays for this account to rescan their photos';
+        refresh.addEventListener('click', async () => {
+          refresh.disabled = true;
+          try {
+            await api(`/api/users/${user.id}/refresh`, { method: 'POST' });
+            message('user-message', `Refresh sent to ${user.username}. Open displays will update within about 10 seconds.`);
+          } catch (error) { message('user-message', error.message, true); }
+          finally { refresh.disabled = false; }
+        });
+        actions.append(refresh);
         const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset password';
         const resetForm = document.createElement('form'); resetForm.className = 'reset-form'; resetForm.hidden = true;
         const input = document.createElement('input'); input.type = 'password'; input.minLength = 8; input.maxLength = 128; input.required = true; input.placeholder = 'New password (8+)'; input.autocomplete = 'new-password';
@@ -392,5 +420,7 @@ document.addEventListener('keydown', event => {
   if (event.key === ' ') { event.preventDefault(); $('play-pause').click(); }
 });
 setInterval(updateClock, 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkRemoteRefresh(); });
+window.addEventListener('focus', checkRemoteRefresh);
 window.addEventListener('resize', updatePhotoFraming);
 api('/api/me').then(data => showDisplay(data.user)).catch(showLogin);

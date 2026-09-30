@@ -42,6 +42,17 @@ test('accounts see only their own HDD folders', async () => {
     assert.equal(alexLogin.status, 200);
     const alexCookie = alexLogin.headers.get('set-cookie').split(';')[0];
     const alexHeaders = { Cookie: alexCookie, 'Content-Type': 'application/json' };
+    assert.deepEqual(await (await request('/api/library-revision', { headers: { Cookie: alexCookie } })).json(), { revision: 0 });
+    assert.equal((await request('/api/library-revision')).status, 401);
+    assert.equal((await request(`/api/users/${alex.id}/refresh`, { method: 'POST', headers: alexHeaders })).status, 403);
+    const remoteRefresh = await request(`/api/users/${alex.id}/refresh`, { method: 'POST', headers: adminHeaders });
+    assert.equal(remoteRefresh.status, 200);
+    assert.deepEqual(await remoteRefresh.json(), { ok: true, revision: 1 });
+    assert.deepEqual(await (await request('/api/library-revision', { headers: { Cookie: alexCookie } })).json(), { revision: 1 });
+    assert.deepEqual(await (await request('/api/library-revision', { headers: { Cookie: adminCookie } })).json(), { revision: 0 });
+    assert.equal((await request('/api/me', { headers: { Cookie: alexCookie } })).status, 200);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(state, 'users.json'), 'utf8')).users.find(user => user.id === alex.id).libraryRevision, 1);
+    assert.equal((await request('/api/users/missing/refresh', { method: 'POST', headers: adminHeaders })).status, 404);
     const display = { sleepStart: '23:15', wakeTime: '07:30', photoFraming: 'fill-pan', clockSize: 'large', weatherSize: 'small', infoPosition: 'top-right' };
     const savedDisplay = await request('/api/display', { method: 'PUT', headers: alexHeaders, body: JSON.stringify({ display }) });
     assert.equal(savedDisplay.status, 200);
@@ -85,6 +96,7 @@ test('accounts see only their own HDD folders', async () => {
     assert.equal((await request(`/api/users/${alex.id}/folder`, { method: 'PUT', headers: adminHeaders, body: JSON.stringify({ folder: 'admin' }) })).status, 409);
     assert.equal((await request(`/api/users/${alex.id}/folder`, { method: 'PUT', headers: adminHeaders, body: JSON.stringify({ folder: '../admin' }) })).status, 400);
     assert.equal((await request(`/api/users/${alex.id}/folder`, { method: 'PUT', headers: adminHeaders, body: JSON.stringify({ folder: 'family/alex' }) })).status, 200);
+    assert.deepEqual(await (await request('/api/library-revision', { headers: { Cookie: alexCookie } })).json(), { revision: 2 });
     const reassigned = await (await request('/api/photos', { headers: { Cookie: alexCookie } })).json();
     assert.deepEqual(reassigned.photos.map(p => p.name), ['family.jpg']);
     const familyPreview = await request(reassigned.photos[0].url, { headers: { Cookie: alexCookie } });

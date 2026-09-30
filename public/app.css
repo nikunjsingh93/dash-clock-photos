@@ -16,3 +16,4 @@
 @media(max-width:470px){.playback{right:15px;bottom:150px}.display[data-info-position="bottom-right"] .playback,.display[data-info-position="bottom-center"] .playback{top:70px;bottom:auto}.display[data-info-position="bottom-right"] .clock-wrap{right:20px}.display[data-clock-size="large"] #clock{font-size:clamp(72px,18vw,104px)}.sleep-time time{font-size:clamp(70px,20vw,110px)}.display[data-clock-size="large"] .sleep-time time{font-size:clamp(82px,22vw,120px)}}
 .sleep-actions{position:absolute;top:28px;right:38px;display:flex;gap:8px}.sleep-actions .icon-button{opacity:.7}.sleep-actions .icon-button:hover,.sleep-actions .icon-button:focus-visible{opacity:1}.sleep-actions .sleep-settings{position:static}
 @media(max-width:760px){.sleep-actions{top:18px;right:18px}}
+.user-actions button:disabled{opacity:.45;cursor:wait}
