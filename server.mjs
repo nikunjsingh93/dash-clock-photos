@@ -12,6 +12,7 @@ const photoTypes = new Map([['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.
 const staticTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
 const failures = new Map();
 const weatherCache = new Map();
+const displayDefaults = Object.freeze({ sleepStart: '00:00', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' });
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
 function send(res, status, value, headers = {}) {
@@ -89,7 +90,7 @@ function sessionUser(req) {
 }
 function requireUser(req) { return sessionUser(req) || fail(401, 'Please sign in'); }
 function requireAdmin(user) { if (user.role !== 'admin') fail(403, 'Administrator access required'); }
-function safeUser(user) { return { id: user.id, username: user.username, folder: user.folder, role: user.role, weather: user.weather }; }
+function safeUser(user) { return { id: user.id, username: user.username, folder: user.folder, role: user.role, weather: user.weather, display: { ...displayDefaults, ...user.display } }; }
 function checkOrigin(req) {
   const origin = req.headers.origin;
   if (origin) {
@@ -235,6 +236,18 @@ const server = http.createServer(async (req, res) => {
         try { new Intl.DateTimeFormat('en', { timeZone: w.timezone }); } catch { fail(400, 'Invalid timezone'); }
         user.weather = { latitude: w.latitude, longitude: w.longitude, label: w.label, timezone: w.timezone, unit: w.unit };
       }
+      save();
+      return send(res, 200, { user: safeUser(user) });
+    }
+    if (req.method === 'PUT' && route === '/api/display') {
+      const user = requireUser(req);
+      const { display } = await readBody(req);
+      if (!display || typeof display !== 'object' || Array.isArray(display) ||
+        !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(display.sleepStart) ||
+        !['small', 'medium', 'large'].includes(display.clockSize) ||
+        !['small', 'medium', 'large'].includes(display.weatherSize) ||
+        !['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(display.infoPosition)) fail(400, 'Invalid display settings');
+      user.display = { sleepStart: display.sleepStart, clockSize: display.clockSize, weatherSize: display.weatherSize, infoPosition: display.infoPosition };
       save();
       return send(res, 200, { user: safeUser(user) });
     }

@@ -28,6 +28,7 @@ test('accounts see only their own HDD folders', async () => {
     assert.equal(login.status, 200);
     const adminCookie = login.headers.get('set-cookie').split(';')[0];
     const adminHeaders = { Cookie: adminCookie, 'Content-Type': 'application/json' };
+    assert.deepEqual((await login.json()).user.display, { sleepStart: '00:00', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' });
     const folders = await (await request('/api/folders', { headers: { Cookie: adminCookie } })).json();
     assert.deepEqual(folders.folders.map(folder => folder.name), ['admin', 'alex', 'family']);
     const tooShort = await request('/api/users', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ username: 'short', password: 'seven77', folder: 'alex' }) });
@@ -38,6 +39,15 @@ test('accounts see only their own HDD folders', async () => {
     const alexLogin = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'alex', password: 'eight888' }) });
     assert.equal(alexLogin.status, 200);
     const alexCookie = alexLogin.headers.get('set-cookie').split(';')[0];
+    const alexHeaders = { Cookie: alexCookie, 'Content-Type': 'application/json' };
+    const display = { sleepStart: '23:15', clockSize: 'large', weatherSize: 'small', infoPosition: 'top-right' };
+    const savedDisplay = await request('/api/display', { method: 'PUT', headers: alexHeaders, body: JSON.stringify({ display }) });
+    assert.equal(savedDisplay.status, 200);
+    assert.deepEqual((await savedDisplay.json()).user.display, display);
+    assert.deepEqual((await (await request('/api/me', { headers: { Cookie: alexCookie } })).json()).user.display, display);
+    assert.equal((await request('/api/display', { method: 'PUT', headers: alexHeaders, body: JSON.stringify({ display: { ...display, sleepStart: '25:00' } }) })).status, 400);
+    assert.deepEqual((await (await request('/api/me', { headers: { Cookie: adminCookie } })).json()).user.display.sleepStart, '00:00');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(state, 'users.json'), 'utf8')).users.find(user => user.id === alex.id).display, display);
     const alexList = await (await request('/api/photos', { headers: { Cookie: alexCookie } })).json();
     assert.deepEqual(alexList.photos.map(p => p.name), ['own.jpg']);
     const adminList = await (await request('/api/photos', { headers: { Cookie: adminCookie } })).json();

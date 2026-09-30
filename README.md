@@ -16,8 +16,9 @@ These captures use a demo account, sample photo, and illustrative New York weath
 
 ## MVP features
 
-- Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls.
+- Full-screen photo slideshow with shuffle/newest order, interval, pause, next/previous, and keyboard controls. Photos fit within the screen without cropping; unused space is black.
 - Current time and date in the selected city's time zone, with 12/24-hour choice.
+- Per-account night clock: the default sleep time is 12:00 AM, when the screen turns black and shows a centered white clock with weather underneath. Photos resume at 6:00 AM. Each account can change its sleep time, clock and weather font sizes, and the clock/weather position in Settings. Choosing 6:00 AM as the sleep time keeps the slideshow on all day.
 - Current temperature from [Open-Meteo](https://open-meteo.com/en/docs), cached by the backend for 15 minutes. City search uses [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api). Weather needs internet access from the container; photos and account data stay on your server.
 - Administrator-created accounts. Each account maps to a selected folder under `/photos`, and photo URLs require that account's signed login cookie. The HDD is mounted read only. Account deletion leaves photos on disk.
 - Administrators choose each account's existing photo folder from an in-app browser of the mounted server drive. Only administrators can change or reset passwords; the minimum password length is eight characters.
@@ -68,7 +69,7 @@ For Portainer, add a Git stack pointing at this repository, branch `main`, Compo
 
 ## Local development
 
-For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather settings, and the session signing key. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
+For local Docker, `compose.yaml` mounts `./photos` read only and `./state` read/write by default. These folders have different purposes: `photos` holds the images and account subfolders; `state` holds account password hashes, weather and display settings, and the session signing key. Do not place `state` on an external drive that may disappear. Create `photos/admin` and `state`, set the admin credentials in `.env`, then run `docker compose up -d --build`.
 
 For a direct Node run, Node 22+ is enough and there are no runtime packages to install. Set `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD` to an 8+ character value and run `npm start`. On PowerShell, set those environment variables with `$env:ADMIN_USERNAME='admin'` and `$env:ADMIN_PASSWORD='...'` first. Run `npm test` for the API isolation checks.
 

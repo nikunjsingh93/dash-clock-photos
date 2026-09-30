@@ -57,6 +57,13 @@
         <button id="next" aria-label="Next photo" title="Next photo">›</button>
       </nav>
     </div>
+    <section id="sleep-view" class="sleep-view" aria-label="Night clock" hidden>
+      <button id="sleep-settings" class="icon-button sleep-settings" title="Settings" aria-label="Settings">⚙</button>
+      <div class="sleep-content">
+        <div class="sleep-time"><time id="sleep-clock">12:00</time><span id="sleep-ampm"></span></div>
+        <div id="sleep-weather" class="sleep-weather">Weather off</div>
+      </div>
+    </section>
   </main>
 
   <div id="panel-backdrop" class="panel-backdrop" hidden></div>
@@ -65,6 +72,8 @@
     <div class="panel-scroll">
       <section class="setting-section"><div class="section-title"><h3>Photo library</h3><button id="refresh" class="text-button">Refresh</button></div><p id="library-info" class="muted"></p><p class="hint">Photos are read directly from your server’s mounted HDD. JPG, PNG, WebP, AVIF, and GIF are supported.</p></section>
       <section class="setting-section"><h3>Slideshow</h3><label class="setting-row">Change photo every<select id="interval"><option value="10">10 seconds</option><option value="20">20 seconds</option><option value="30" selected>30 seconds</option><option value="60">1 minute</option><option value="300">5 minutes</option></select></label><label class="setting-row">Photo order<select id="order"><option value="shuffle">Shuffle</option><option value="newest">Newest first</option></select></label><label class="setting-row">Clock style<select id="clock-format"><option value="12">12 hour</option><option value="24">24 hour</option></select></label></section>
+      <section class="setting-section"><h3>Night clock</h3><label class="setting-row">Sleep time<input id="sleep-start" type="time" value="00:00" required></label><p class="hint">At this time, photos turn off and a white clock appears on black. Photos return at 6:00 AM. Uses the selected city’s time zone, or this device’s time zone until a city is set.</p></section>
+      <section class="setting-section"><h3>Clock & weather layout</h3><label class="setting-row">Clock size<select id="clock-size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label><label class="setting-row">Weather size<select id="weather-size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label><label class="setting-row">Screen position<select id="info-position"><option value="bottom-left">Bottom left</option><option value="bottom-center">Bottom center</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-center">Top center</option><option value="top-right">Top right</option></select></label><p id="display-message" class="form-message" role="status"></p></section>
       <section class="setting-section"><h3>Weather & time zone</h3><p id="current-location" class="muted">No location set</p><form id="location-form" class="inline-form"><input id="location-query" placeholder="Search city or postal code" aria-label="City or postal code" required><button type="submit">Search</button></form><div id="location-results" class="location-results"></div><label class="setting-row">Temperature<select id="unit"><option value="fahrenheit">Fahrenheit</option><option value="celsius">Celsius</option></select></label><p class="hint">The clock follows the selected city’s time zone. Weather updates every 15 minutes.</p></section>
       <section id="admin-account-section" class="setting-section" hidden><h3>Admin account</h3><p id="account-name" class="muted"></p><form id="password-form" class="stack-form"><input name="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" required><input name="newPassword" type="password" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required><button type="submit" class="secondary">Change my password</button></form><p id="password-message" class="form-message" role="status"></p></section>
       <section id="admin-section" class="setting-section" hidden>

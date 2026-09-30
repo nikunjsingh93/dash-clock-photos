@@ -1,6 +1,10 @@
 const $ = id => document.getElementById(id);
-const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, timer: null, weatherTimer: null, weather: null };
+const state = { user: null, photos: [], sequence: [], index: 0, active: 0, playing: true, sleeping: false, timer: null, weatherTimer: null, weather: null };
 const prefs = { interval: Number(localStorage.getItem('dash-interval')) || 30, order: localStorage.getItem('dash-order') || 'shuffle', clockFormat: localStorage.getItem('dash-clock-format') || '12' };
+const displayDefaults = { sleepStart: '00:00', clockSize: 'medium', weatherSize: 'medium', infoPosition: 'bottom-left' };
+let displaySave = Promise.resolve();
+let persistedDisplay = displayDefaults;
+let displayVersion = 0;
 let folderTargetUserId = null;
 let browsedFolder = '';
 
@@ -14,6 +18,10 @@ async function api(route, options = {}) {
 function setVisible(id, visible) { $(id).hidden = !visible; }
 function showLogin() {
   state.user = null;
+  displayVersion++;
+  state.sleeping = false;
+  $('display').classList.remove('sleeping');
+  setVisible('sleep-view', false);
   clearInterval(state.timer);
   clearInterval(state.weatherTimer);
   setVisible('display', false);
@@ -22,6 +30,11 @@ function showLogin() {
 }
 async function showDisplay(user) {
   state.user = user;
+  displayVersion++;
+  persistedDisplay = { ...displayDefaults, ...user.display };
+  state.sleeping = false;
+  $('display').classList.remove('sleeping', 'has-photos');
+  setVisible('sleep-view', false);
   setVisible('login', false);
   setVisible('display', true);
   $('account-name').textContent = `Signed in as ${user.username}`;
@@ -32,6 +45,7 @@ async function showDisplay(user) {
   $('interval').value = String(prefs.interval);
   $('order').value = prefs.order;
   $('clock-format').value = prefs.clockFormat;
+  applyDisplayPrefs();
   updateClock();
   await Promise.all([loadPhotos(), loadWeather()]);
   clearInterval(state.weatherTimer);
@@ -66,7 +80,7 @@ function movePhoto(direction) {
 }
 function schedule() {
   clearInterval(state.timer);
-  if (state.playing && state.sequence.length > 1) state.timer = setInterval(() => movePhoto(1), prefs.interval * 1000);
+  if (!state.sleeping && state.playing && state.sequence.length > 1) state.timer = setInterval(() => movePhoto(1), prefs.interval * 1000);
 }
 async function loadPhotos() {
   try {
@@ -74,6 +88,7 @@ async function loadPhotos() {
     state.photos = photos;
     makeSequence();
     const hasPhotos = photos.length > 0;
+    $('display').classList.toggle('has-photos', hasPhotos);
     setVisible('empty', !hasPhotos);
     $('folder-hint').textContent = `/photos/${folder}`;
     $('library-info').textContent = `${photos.length.toLocaleString()} photo${photos.length === 1 ? '' : 's'} in /photos/${folder}`;
@@ -106,8 +121,34 @@ async function loadWeather() {
     if (!state.weather.configured) { $('temp').textContent = 'Weather off'; $('weather-description').textContent = 'Set your location in settings'; }
     else if (state.weather.unavailable) { $('temp').textContent = 'Weather unavailable'; $('weather-description').textContent = state.weather.label; }
     else { $('temp').textContent = `${weatherIcon(state.weather.code, state.weather.isDay)} ${Math.round(state.weather.temperature)}${state.weather.unit}`; $('weather-description').textContent = `${weatherText(state.weather.code, state.weather.isDay)} in ${state.weather.label}`; }
+    updateSleepWeather();
     updateClock();
-  } catch { $('temp').textContent = 'Weather unavailable'; }
+  } catch { $('temp').textContent = 'Weather unavailable'; $('weather-description').textContent = ''; updateSleepWeather(); }
+}
+function updateSleepWeather() {
+  const description = $('weather-description').textContent;
+  $('sleep-weather').textContent = description && !['Set your location in settings', ''].includes(description)
+    ? `${$('temp').textContent} · ${description}` : $('temp').textContent;
+}
+function applyDisplayPrefs() {
+  const display = { ...displayDefaults, ...state.user?.display };
+  $('sleep-start').value = display.sleepStart;
+  $('clock-size').value = display.clockSize;
+  $('weather-size').value = display.weatherSize;
+  $('info-position').value = display.infoPosition;
+  $('display').dataset.clockSize = display.clockSize;
+  $('display').dataset.weatherSize = display.weatherSize;
+  $('display').dataset.infoPosition = display.infoPosition;
+}
+function sleepActive(now, timezone, start) {
+  const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timezone ? { timeZone: timezone } : {}) }).formatToParts(now);
+  const value = type => Number(parts.find(part => part.type === type)?.value);
+  const minute = value('hour') * 60 + value('minute');
+  const [hour, minutes] = start.split(':').map(Number);
+  const from = hour * 60 + minutes;
+  const until = 6 * 60;
+  if (from === until) return false;
+  return from < until ? minute >= from && minute < until : minute >= from || minute < until;
 }
 function updateClock() {
   if (!state.user) return;
@@ -117,7 +158,16 @@ function updateClock() {
   const value = type => time.find(part => part.type === type)?.value || '';
   $('clock').textContent = `${value('hour')}:${value('minute')}`;
   $('ampm').textContent = prefs.clockFormat === '12' ? value('dayPeriod') : '';
+  $('sleep-clock').textContent = $('clock').textContent;
+  $('sleep-ampm').textContent = $('ampm').textContent;
   $('date').textContent = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', ...(timezone ? { timeZone: timezone } : {}) }).format(now);
+  const sleeping = sleepActive(now, timezone, state.user.display?.sleepStart || displayDefaults.sleepStart);
+  if (sleeping !== state.sleeping) {
+    state.sleeping = sleeping;
+    $('display').classList.toggle('sleeping', sleeping);
+    setVisible('sleep-view', sleeping);
+    schedule();
+  }
 }
 function openPanel() { $('panel').classList.add('open'); $('panel').setAttribute('aria-hidden', 'false'); setVisible('panel-backdrop', true); }
 function closePanel() { $('panel').classList.remove('open'); $('panel').setAttribute('aria-hidden', 'true'); setVisible('panel-backdrop', false); }
@@ -209,6 +259,7 @@ $('login-form').addEventListener('submit', async event => {
   finally { button.disabled = false; }
 });
 $('settings-open').addEventListener('click', openPanel);
+$('sleep-settings').addEventListener('click', openPanel);
 $('settings-close').addEventListener('click', closePanel);
 $('panel-backdrop').addEventListener('click', closePanel);
 $('refresh').addEventListener('click', loadPhotos);
@@ -220,6 +271,37 @@ $('fullscreen').addEventListener('click', () => { if (document.fullscreenElement
 $('interval').addEventListener('change', event => { prefs.interval = Number(event.target.value); localStorage.setItem('dash-interval', prefs.interval); schedule(); });
 $('order').addEventListener('change', event => { prefs.order = event.target.value; localStorage.setItem('dash-order', prefs.order); makeSequence(); showPhoto(); schedule(); });
 $('clock-format').addEventListener('change', event => { prefs.clockFormat = event.target.value; localStorage.setItem('dash-clock-format', prefs.clockFormat); updateClock(); });
+for (const id of ['sleep-start', 'clock-size', 'weather-size', 'info-position']) {
+  $(id).addEventListener('change', () => {
+    const userId = state.user.id;
+    const version = ++displayVersion;
+    const display = { sleepStart: $('sleep-start').value, clockSize: $('clock-size').value, weatherSize: $('weather-size').value, infoPosition: $('info-position').value };
+    if (!/^\d{2}:\d{2}$/.test(display.sleepStart)) { message('display-message', 'Choose a valid sleep time.', true); return; }
+    $('display').dataset.clockSize = display.clockSize;
+    $('display').dataset.weatherSize = display.weatherSize;
+    $('display').dataset.infoPosition = display.infoPosition;
+    state.user.display = display;
+    updateClock();
+    displaySave = displaySave.catch(() => {}).then(async () => {
+      if (state.user?.id !== userId) return;
+      try {
+        const response = await api('/api/display', { method: 'PUT', body: JSON.stringify({ display }) });
+        if (state.user?.id !== userId) return;
+        persistedDisplay = response.user.display;
+        if (version === displayVersion) state.user.display = response.user.display;
+        message('display-message', 'Display settings saved.');
+      } catch (error) {
+        if (state.user?.id !== userId) return;
+        if (version === displayVersion) {
+          state.user.display = persistedDisplay;
+          applyDisplayPrefs();
+          updateClock();
+        }
+        message('display-message', error.message, true);
+      }
+    });
+  });
+}
 $('location-form').addEventListener('submit', async event => {
   event.preventDefault();
   const results = $('location-results'); results.replaceChildren(); results.textContent = 'Searching…';
